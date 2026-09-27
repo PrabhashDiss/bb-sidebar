@@ -28,8 +28,14 @@ import {
   normalizeProjectIconPath,
 } from "./project-icons";
 import {
+  CHILD_THREAD_ICON_STYLES,
+  CHILD_THREAD_SORT_DIRECTIONS,
+  CHILD_THREAD_SORT_FIELDS,
   DEFAULT_SIDEBAR_SETTINGS,
   SIDEBAR_SETTINGS_CHANNEL,
+  type ChildThreadIconStyle,
+  type ChildThreadSortDirection,
+  type ChildThreadSortField,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
 import { configuredSnoozePresetError } from "./lifecycle";
@@ -80,6 +86,12 @@ const migrations = [
   `ALTER TABLE sidebar_settings
      ADD COLUMN show_running_children_when_collapsed INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE thread_lifecycle ADD COLUMN parked_at INTEGER`,
+  `ALTER TABLE sidebar_settings
+     ADD COLUMN child_sort_field TEXT NOT NULL DEFAULT 'created'`,
+  `ALTER TABLE sidebar_settings
+     ADD COLUMN child_sort_direction TEXT NOT NULL DEFAULT 'ascending'`,
+  `ALTER TABLE sidebar_settings
+     ADD COLUMN child_icon_style TEXT NOT NULL DEFAULT 'disc'`,
 ];
 
 export interface StoredLifecycleRow {
@@ -108,6 +120,9 @@ interface SidebarSettingsDbRow {
   auto_settle_inactive: number;
   auto_settle_after_days: number;
   auto_settle_on_merge: number;
+  child_sort_field: string;
+  child_sort_direction: string;
+  child_icon_style: string;
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
@@ -159,6 +174,9 @@ const sidebarSettingsSchema = z
     autoSettleInactive: z.boolean(),
     autoSettleAfterDays: z.number().int().min(1).max(90),
     autoSettleOnMerge: z.boolean(),
+    childSortField: z.enum(CHILD_THREAD_SORT_FIELDS),
+    childSortDirection: z.enum(CHILD_THREAD_SORT_DIRECTIONS),
+    childIconStyle: z.enum(CHILD_THREAD_ICON_STYLES),
   })
   .strict();
 const uploadFilenameSchema = z
@@ -462,7 +480,8 @@ export default async function plugin(bb: BbPluginApi) {
         `SELECT snooze_presets, inactive_threads_enabled,
                 inactive_after_hours, show_running_children_when_collapsed,
                 auto_settle_inactive,
-                auto_settle_after_days, auto_settle_on_merge
+                auto_settle_after_days, auto_settle_on_merge,
+                child_sort_field, child_sort_direction, child_icon_style
            FROM sidebar_settings
           WHERE id = 1`,
       )
@@ -477,6 +496,21 @@ export default async function plugin(bb: BbPluginApi) {
           autoSettleInactive: row.auto_settle_inactive === 1,
           autoSettleAfterDays: row.auto_settle_after_days,
           autoSettleOnMerge: row.auto_settle_on_merge === 1,
+          childSortField: CHILD_THREAD_SORT_FIELDS.includes(
+            row.child_sort_field as ChildThreadSortField,
+          )
+            ? (row.child_sort_field as ChildThreadSortField)
+            : DEFAULT_SIDEBAR_SETTINGS.childSortField,
+          childSortDirection: CHILD_THREAD_SORT_DIRECTIONS.includes(
+            row.child_sort_direction as ChildThreadSortDirection,
+          )
+            ? (row.child_sort_direction as ChildThreadSortDirection)
+            : DEFAULT_SIDEBAR_SETTINGS.childSortDirection,
+          childIconStyle: CHILD_THREAD_ICON_STYLES.includes(
+            row.child_icon_style as ChildThreadIconStyle,
+          )
+            ? (row.child_icon_style as ChildThreadIconStyle)
+            : DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
         }
       : { ...DEFAULT_SIDEBAR_SETTINGS };
   };
@@ -486,8 +520,9 @@ export default async function plugin(bb: BbPluginApi) {
          id, snooze_presets, inactive_threads_enabled,
          inactive_after_hours, show_running_children_when_collapsed,
          auto_settle_inactive,
-         auto_settle_after_days, auto_settle_on_merge
-       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+         auto_settle_after_days, auto_settle_on_merge,
+         child_sort_field, child_sort_direction, child_icon_style
+       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          snooze_presets = excluded.snooze_presets,
          inactive_threads_enabled = excluded.inactive_threads_enabled,
@@ -496,7 +531,10 @@ export default async function plugin(bb: BbPluginApi) {
            excluded.show_running_children_when_collapsed,
          auto_settle_inactive = excluded.auto_settle_inactive,
          auto_settle_after_days = excluded.auto_settle_after_days,
-         auto_settle_on_merge = excluded.auto_settle_on_merge`,
+         auto_settle_on_merge = excluded.auto_settle_on_merge,
+         child_sort_field = excluded.child_sort_field,
+         child_sort_direction = excluded.child_sort_direction,
+         child_icon_style = excluded.child_icon_style`,
     ).run(
       values.snoozePresets,
       values.inactiveThreadsEnabled ? 1 : 0,
@@ -505,6 +543,9 @@ export default async function plugin(bb: BbPluginApi) {
       values.autoSettleInactive ? 1 : 0,
       values.autoSettleAfterDays,
       values.autoSettleOnMerge ? 1 : 0,
+      values.childSortField,
+      values.childSortDirection,
+      values.childIconStyle,
     );
   };
 
@@ -555,6 +596,9 @@ export default async function plugin(bb: BbPluginApi) {
           typeof values.autoSettleOnMerge === "boolean"
             ? values.autoSettleOnMerge
             : DEFAULT_SIDEBAR_SETTINGS.autoSettleOnMerge,
+        childSortField: DEFAULT_SIDEBAR_SETTINGS.childSortField,
+        childSortDirection: DEFAULT_SIDEBAR_SETTINGS.childSortDirection,
+        childIconStyle: DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
       });
       if (hasLegacyValues && migrated.success) {
         writeSidebarSettings(migrated.data);

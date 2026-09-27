@@ -11,8 +11,14 @@ import type { bbSidebarRpcContract } from "./server";
 import {
   cachedSidebarSettings,
   cacheSidebarSettings,
+  CHILD_THREAD_ICON_STYLES,
+  CHILD_THREAD_SORT_DIRECTIONS,
+  CHILD_THREAD_SORT_FIELDS,
   DEFAULT_SIDEBAR_SETTINGS,
   SIDEBAR_SETTINGS_CHANNEL,
+  type ChildThreadIconStyle,
+  type ChildThreadSortDirection,
+  type ChildThreadSortField,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
 import { ProjectIconSettings } from "./ProjectIconSettings";
@@ -113,6 +119,22 @@ function Switch({
     </button>
   );
 }
+
+const CHILD_SORT_FIELD_LABELS: Record<ChildThreadSortField, string> = {
+  created: "Date created",
+  activity: "Last activity",
+};
+const CHILD_ICON_STYLE_LABELS: Record<ChildThreadIconStyle, string> = {
+  disc: "Colour circle",
+  provider: "Provider icon",
+};
+const CHILD_SORT_DIRECTION_LABELS: Record<ChildThreadSortDirection, string> = {
+  ascending: "Ascending",
+  descending: "Descending",
+};
+
+const selectClass =
+  "h-9 w-36 rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 const numberInputClass =
   "h-9 w-24 rounded-md border border-border bg-background px-2.5 text-right text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground";
@@ -320,6 +342,75 @@ export function SidebarSettings() {
               update("showRunningChildrenWhenCollapsed", checked)
             }
           />
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="Child threads"
+        description="How child threads look and in which order they appear under their parent, in the sidebar and in the thread header."
+      >
+        <SettingRow
+          title="Sort"
+          description="Which date orders child threads, and in which direction. Descending puts the newest on top."
+        >
+          <div className="flex items-center gap-2">
+            <select
+              aria-label="Child threads sort field"
+              value={draft.childSortField}
+              onChange={(event) =>
+                update(
+                  "childSortField",
+                  event.target.value as ChildThreadSortField,
+                )
+              }
+              className={selectClass}
+            >
+              {CHILD_THREAD_SORT_FIELDS.map((field) => (
+                <option key={field} value={field}>
+                  {CHILD_SORT_FIELD_LABELS[field]}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Child threads sort direction"
+              value={draft.childSortDirection}
+              onChange={(event) =>
+                update(
+                  "childSortDirection",
+                  event.target.value as ChildThreadSortDirection,
+                )
+              }
+              className={selectClass}
+            >
+              {CHILD_THREAD_SORT_DIRECTIONS.map((direction) => (
+                <option key={direction} value={direction}>
+                  {CHILD_SORT_DIRECTION_LABELS[direction]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </SettingRow>
+        <SettingRow
+          title="Child thread icon"
+          description="A colour circle per thread, or the icon of the agent the thread runs on. With provider icons, the parent's badge shows each agent once."
+        >
+          <select
+            aria-label="Child thread icon"
+            value={draft.childIconStyle}
+            onChange={(event) =>
+              update(
+                "childIconStyle",
+                event.target.value as ChildThreadIconStyle,
+              )
+            }
+            className={selectClass}
+          >
+            {CHILD_THREAD_ICON_STYLES.map((style) => (
+              <option key={style} value={style}>
+                {CHILD_ICON_STYLE_LABELS[style]}
+              </option>
+            ))}
+          </select>
         </SettingRow>
       </SettingsGroup>
 

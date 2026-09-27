@@ -53,6 +53,9 @@ const defaultSidebarSettings = {
   autoSettleInactive: true,
   autoSettleAfterDays: 3,
   autoSettleOnMerge: true,
+  childSortField: "created",
+  childSortDirection: "ascending",
+  childIconStyle: "disc",
 };
 
 function thread(
@@ -444,6 +447,7 @@ describe("sidebar settings", () => {
     });
 
     expect(await screen.findByText("Thread organization")).toBeDefined();
+    expect(screen.getByText("Child threads")).toBeDefined();
     expect(screen.getByText("Automatic cleanup")).toBeDefined();
     expect(screen.getByText("Project icons")).toBeDefined();
     expect(
@@ -463,12 +467,24 @@ describe("sidebar settings", () => {
     fireEvent.click(
       screen.getByRole("switch", { name: "Show children that need attention" }),
     );
+    fireEvent.change(screen.getByLabelText("Child threads sort field"), {
+      target: { value: "activity" },
+    });
+    fireEvent.change(screen.getByLabelText("Child threads sort direction"), {
+      target: { value: "descending" },
+    });
+    fireEvent.change(screen.getByLabelText("Child thread icon"), {
+      target: { value: "provider" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
       expect(saved).toEqual({
         ...defaultSidebarSettings,
         snoozePresets: "1h, Wait refresh=5h, Tonight=evening@20:00, Morning=tomorrow@08:30, Monday=next-week@10:00",
         showRunningChildrenWhenCollapsed: false,
+        childSortField: "activity",
+        childSortDirection: "descending",
+        childIconStyle: "provider",
       }),
     );
   });
@@ -558,6 +574,38 @@ describe("sidebar settings", () => {
       }),
     );
     expect(screen.getByText("brand.svg")).toBeDefined();
+  });
+
+  it("keeps a settings cache written before the child-thread settings", () => {
+    const previous: Record<string, unknown> = {
+      ...defaultSidebarSettings,
+      inactiveAfterHours: 12,
+    };
+    delete previous.childSortField;
+    delete previous.childSortDirection;
+    delete previous.childIconStyle;
+    window.localStorage.setItem(
+      "bb-sidebar:settings-cache:v1",
+      JSON.stringify(previous),
+    );
+    renderSlot(sidebarSettings, {}, {
+      rpc: {
+        getSidebarSettings: () => new Promise(() => {}),
+        listProjectIconSettings: () => ({ projects: [] }),
+      },
+    });
+
+    expect(screen.queryByText("Loading settings...")).toBeNull();
+    expect(
+      (screen.getByLabelText("Hours before inactive") as HTMLInputElement).value,
+    ).toBe("12");
+    expect(
+      (screen.getByLabelText("Child threads sort field") as HTMLSelectElement)
+        .value,
+    ).toBe("created");
+    expect(
+      (screen.getByLabelText("Child thread icon") as HTMLSelectElement).value,
+    ).toBe("disc");
   });
 
   it("preserves unsaved settings when a realtime refresh arrives", async () => {

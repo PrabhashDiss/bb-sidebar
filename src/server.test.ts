@@ -165,6 +165,9 @@ describe("lifecycle RPC", () => {
       autoSettleInactive: true,
       autoSettleAfterDays: 3,
       autoSettleOnMerge: true,
+      childSortField: "created",
+      childSortDirection: "ascending",
+      childIconStyle: "disc",
     });
     await expect(
       harness.behavior.callRpc("updateSidebarSettings", {
@@ -175,6 +178,9 @@ describe("lifecycle RPC", () => {
         autoSettleInactive: false,
         autoSettleAfterDays: 7,
         autoSettleOnMerge: false,
+        childSortField: "activity",
+        childSortDirection: "descending",
+        childIconStyle: "provider",
       }),
     ).resolves.toEqual({
       snoozePresets: "10m, 4h",
@@ -184,6 +190,9 @@ describe("lifecycle RPC", () => {
       autoSettleInactive: false,
       autoSettleAfterDays: 7,
       autoSettleOnMerge: false,
+      childSortField: "activity",
+      childSortDirection: "descending",
+      childIconStyle: "provider",
     });
     expect(harness.inspection.realtimeSignals).toContainEqual({
       channel: "sidebar-settings",
@@ -206,6 +215,9 @@ describe("lifecycle RPC", () => {
         autoSettleInactive: true,
         autoSettleAfterDays: 3,
         autoSettleOnMerge: true,
+        childSortField: "created",
+        childSortDirection: "ascending",
+        childIconStyle: "disc",
       }),
     ).rejects.toThrow("rpc input validation failed");
     await expect(
@@ -257,6 +269,9 @@ describe("lifecycle RPC", () => {
       autoSettleInactive: false,
       autoSettleAfterDays: 14,
       autoSettleOnMerge: false,
+      childSortField: "created",
+      childSortDirection: "ascending",
+      childIconStyle: "disc",
     });
   });
 
@@ -1188,6 +1203,9 @@ describe("automatic settle evaluation", () => {
         autoSettleInactive: false,
         autoSettleAfterDays: 3,
         autoSettleOnMerge: false,
+        childSortField: "created",
+        childSortDirection: "ascending",
+        childIconStyle: "disc",
       }),
     ).resolves.toMatchObject({ autoSettleInactive: false });
 
