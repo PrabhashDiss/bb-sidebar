@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## [0.2.22] - 2026-09-27
+
+### Added
+
+- A **Child threads** settings section. **Sort** orders child threads by date created or last activity, ascending or descending, in the sidebar, the thread header popup, the parent's badge, and hover cards. **Child thread icon** shows a colour circle per thread (the default) or the agent's provider icon; with provider icons, the parent's badge shows each agent once. The defaults keep the previous look and oldest-first order.
+
+### Improved
+
+- The child-thread tree line sits under the parent's title, and child rows sit closer to it.
+
+### Fixed
+
+- A slow, older settings load arriving after a newer one no longer rolls the sidebar back to the previous settings.
+- The thread header's child-thread popup stays inside the window and scrolls a long list instead of running off screen.
+
+Thanks to [@a-kras](https://github.com/a-kras) for designing and contributing the child-thread settings and the settings-load fix in [#3](https://github.com/yusuf8834/bb-sidebar/pull/3).
+
 ## [0.2.21] - 2026-09-23
 
 ### Added
@@ -119,6 +136,8 @@
 - Keep snooze, settle, and restore actions visible on touch devices, with parked thread labels and snooze countdowns beside the restore button.
 - Group the unpin button with card actions, or with the status and Woke label when parking actions are unavailable.
 - Keep the status visible when focusing Unpin on cards without parking actions.
+
+Thanks to [@banjerluke](https://github.com/banjerluke) for contributing the touch-device fix in [#2](https://github.com/yusuf8834/bb-sidebar/pull/2).
 
 ## [0.2.11] - 2026-09-11
 
