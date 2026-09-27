@@ -413,7 +413,7 @@ describe("SubagentsChip", () => {
     });
   });
 
-  it("closes on Escape and restores focus to the trigger", () => {
+  it("closes on Escape and restores focus to the trigger", async () => {
     renderSlot(
       childrenChip,
       { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
@@ -440,7 +440,36 @@ describe("SubagentsChip", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(screen.queryByRole("region", { name: "Child threads" })).toBeNull();
-    expect(document.activeElement).toBe(trigger);
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("closes when clicking outside the popup", async () => {
+    renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    const popup = screen.getByRole("region", { name: "Child threads" });
+    fireEvent.pointerDown(popup);
+    expect(screen.getByRole("region", { name: "Child threads" })).toBeDefined();
+
+    const outside = document.body.appendChild(document.createElement("div"));
+    await waitFor(() => {
+      fireEvent.pointerDown(outside, { pointerType: "mouse" });
+      fireEvent.click(outside);
+      expect(screen.queryByRole("region", { name: "Child threads" })).toBeNull();
+    });
   });
 
   it("ignores a settings load that answers after a newer one", async () => {
