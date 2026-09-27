@@ -312,6 +312,18 @@ describe("child threads", () => {
     expect(children.get("parent")?.map((t) => t.id)).toEqual(["b", "a"]);
   });
 
+  it("breaks child sort ties by id, whatever the input order", () => {
+    const threads = [
+      thread({ id: "parent" }),
+      thread({ id: "b", parentThreadId: "parent", createdAt: 10 }),
+      thread({ id: "a", parentThreadId: "parent", createdAt: 10 }),
+    ];
+    expect(childrenOf(threads, "parent").map((t) => t.id)).toEqual(["a", "b"]);
+    expect(
+      childrenOf([...threads].reverse(), "parent").map((t) => t.id),
+    ).toEqual(["a", "b"]);
+  });
+
   it("excludes archived children from child helpers and attention counts", () => {
     const threads = [
       thread({ id: "parent" }),

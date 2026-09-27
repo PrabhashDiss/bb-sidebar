@@ -38,9 +38,11 @@ export function useChildThreadDisplayValue(
   const iconStyle =
     settings?.childIconStyle ?? DEFAULT_SIDEBAR_SETTINGS.childIconStyle;
   const { field, direction } = childThreadSortOf(settings);
+  // Kept apart so a provider refresh does not re-sort every child list.
+  const sort = useMemo(() => ({ field, direction }), [field, direction]);
   return useMemo(
-    () => ({ iconStyle, providerById, sort: { field, direction } }),
-    [iconStyle, providerById, field, direction],
+    () => ({ iconStyle, providerById, sort }),
+    [iconStyle, providerById, sort],
   );
 }
 
@@ -50,7 +52,10 @@ export function compareChildThreads(
   const key = sort.field === "activity" ? "updatedAt" : "createdAt";
   const sign = sort.direction === "descending" ? -1 : 1;
   return (left, right) =>
-    sign * (left[key] - right[key] || left.createdAt - right.createdAt);
+    sign *
+    (left[key] - right[key] ||
+      left.createdAt - right.createdAt ||
+      left.id.localeCompare(right.id));
 }
 
 /**

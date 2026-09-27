@@ -31,11 +31,9 @@ import {
   CHILD_THREAD_ICON_STYLES,
   CHILD_THREAD_SORT_DIRECTIONS,
   CHILD_THREAD_SORT_FIELDS,
+  childThreadSettingsOf,
   DEFAULT_SIDEBAR_SETTINGS,
   SIDEBAR_SETTINGS_CHANNEL,
-  type ChildThreadIconStyle,
-  type ChildThreadSortDirection,
-  type ChildThreadSortField,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
 import { configuredSnoozePresetError } from "./lifecycle";
@@ -496,21 +494,11 @@ export default async function plugin(bb: BbPluginApi) {
           autoSettleInactive: row.auto_settle_inactive === 1,
           autoSettleAfterDays: row.auto_settle_after_days,
           autoSettleOnMerge: row.auto_settle_on_merge === 1,
-          childSortField: CHILD_THREAD_SORT_FIELDS.includes(
-            row.child_sort_field as ChildThreadSortField,
-          )
-            ? (row.child_sort_field as ChildThreadSortField)
-            : DEFAULT_SIDEBAR_SETTINGS.childSortField,
-          childSortDirection: CHILD_THREAD_SORT_DIRECTIONS.includes(
-            row.child_sort_direction as ChildThreadSortDirection,
-          )
-            ? (row.child_sort_direction as ChildThreadSortDirection)
-            : DEFAULT_SIDEBAR_SETTINGS.childSortDirection,
-          childIconStyle: CHILD_THREAD_ICON_STYLES.includes(
-            row.child_icon_style as ChildThreadIconStyle,
-          )
-            ? (row.child_icon_style as ChildThreadIconStyle)
-            : DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
+          ...childThreadSettingsOf({
+            childSortField: row.child_sort_field,
+            childSortDirection: row.child_sort_direction,
+            childIconStyle: row.child_icon_style,
+          }),
         }
       : { ...DEFAULT_SIDEBAR_SETTINGS };
   };

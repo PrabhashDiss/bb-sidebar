@@ -54,6 +54,46 @@ export function childThreadSortOf(
   };
 }
 
+type ChildThreadSettings = Pick<
+  SidebarSettingsValues,
+  "childSortField" | "childSortDirection" | "childIconStyle"
+>;
+
+function oneOf<const T extends string>(
+  allowed: readonly T[],
+  value: unknown,
+  fallback: T,
+): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+/**
+ * The child-thread settings from an untrusted record, such as a database row
+ * or a cache written by an older version. Missing or unknown values fall back
+ * to the defaults.
+ */
+export function childThreadSettingsOf(value: {
+  [Key in keyof ChildThreadSettings]?: unknown;
+}): ChildThreadSettings {
+  return {
+    childSortField: oneOf(
+      CHILD_THREAD_SORT_FIELDS,
+      value.childSortField,
+      DEFAULT_SIDEBAR_SETTINGS.childSortField,
+    ),
+    childSortDirection: oneOf(
+      CHILD_THREAD_SORT_DIRECTIONS,
+      value.childSortDirection,
+      DEFAULT_SIDEBAR_SETTINGS.childSortDirection,
+    ),
+    childIconStyle: oneOf(
+      CHILD_THREAD_ICON_STYLES,
+      value.childIconStyle,
+      DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
+    ),
+  };
+}
+
 const SIDEBAR_SETTINGS_CACHE_KEY = "bb-sidebar:settings-cache:v1";
 const settingsByRpcClient = new WeakMap<object, SidebarSettingsValues>();
 
@@ -78,21 +118,7 @@ function readStoredSidebarSettings(): SidebarSettingsValues | null {
     // instead of dropping it and flashing the old settings until the load.
     return {
       ...value,
-      childSortField: CHILD_THREAD_SORT_FIELDS.includes(
-        value.childSortField as ChildThreadSortField,
-      )
-        ? (value.childSortField as ChildThreadSortField)
-        : DEFAULT_SIDEBAR_SETTINGS.childSortField,
-      childSortDirection: CHILD_THREAD_SORT_DIRECTIONS.includes(
-        value.childSortDirection as ChildThreadSortDirection,
-      )
-        ? (value.childSortDirection as ChildThreadSortDirection)
-        : DEFAULT_SIDEBAR_SETTINGS.childSortDirection,
-      childIconStyle: CHILD_THREAD_ICON_STYLES.includes(
-        value.childIconStyle as ChildThreadIconStyle,
-      )
-        ? (value.childIconStyle as ChildThreadIconStyle)
-        : DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
+      ...childThreadSettingsOf(value),
     } as SidebarSettingsValues;
   } catch {
     return null;
