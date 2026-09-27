@@ -320,7 +320,7 @@ export function ChildThreadList({
         "flex flex-col",
         variant === "header"
           ? "gap-px p-1.5 pt-0.5"
-          : "ml-[21px] mt-1 border-l-[1.5px] border-border pl-3",
+          : "ml-2.5 mt-1 border-l-[1.5px] border-border pl-1",
       )}
     >
       {visibleThreads.map((child) => {
