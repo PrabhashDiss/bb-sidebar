@@ -26,7 +26,12 @@ import {
   type ChildStatusKind,
 } from "./child-status";
 import { childThreadSortOf, type ChildThreadSort } from "./sidebar-settings";
-import { compareChildThreads } from "./ChildThreadDisplay";
+import {
+  ChildThreadIcon,
+  compareChildThreads,
+  useChildThreadDisplay,
+} from "./ChildThreadDisplay";
+import { ProviderGlyph } from "./ProviderGlyph";
 
 const MAX_CHILD_DOTS = 3;
 
@@ -130,7 +135,27 @@ export function ChildThreadDots({
   threads: readonly PluginSidebarThread[];
   compact?: boolean;
 }) {
+  const { iconStyle, providerById } = useChildThreadDisplay();
   const visibleThreads = threads.filter((thread) => !thread.isArchived);
+  if (iconStyle === "provider") {
+    // One glyph per agent: three identical logos would say nothing.
+    const providerIds = [
+      ...new Set(visibleThreads.map((thread) => thread.providerId)),
+    ].slice(0, MAX_CHILD_DOTS);
+    return (
+      <span className="flex shrink-0 items-center gap-0.5" aria-hidden>
+        {providerIds.map((providerId) => (
+          <span key={providerId} data-child-thread-dot="">
+            <ProviderGlyph
+              providerId={providerId}
+              provider={providerById.get(providerId) ?? null}
+              className={compact ? "size-3 [&_span]:size-2.5" : undefined}
+            />
+          </span>
+        ))}
+      </span>
+    );
+  }
   return (
     <span className="flex shrink-0 items-center" aria-hidden>
       {visibleThreads.slice(0, MAX_CHILD_DOTS).map((thread, index) => (
@@ -455,9 +480,11 @@ function ChildThreadRow({
                 : "h-full gap-2 rounded-md pl-2",
             )}
           >
-            <Disc
+            <ChildThreadIcon
               thread={thread}
-              className={variant === "header" ? undefined : "size-2 border-0"}
+              discClassName={
+                variant === "header" ? undefined : "size-2 border-0"
+              }
             />
             <span
               className={cn(

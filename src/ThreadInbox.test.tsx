@@ -1574,6 +1574,51 @@ describe("ThreadInbox", () => {
     });
   });
 
+  it("shows provider icons for child threads when chosen", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Parent" }),
+          thread({
+            id: "codex-child",
+            title: "Codex child",
+            parentThreadId: "parent",
+            providerId: "codex",
+            indicator: "runtime",
+          }),
+          thread({
+            id: "claude-child",
+            title: "Claude child",
+            parentThreadId: "parent",
+            providerId: "claude-code",
+            indicator: "runtime",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      providers: { status: "ready", providers: defaultProviders },
+      rpc: {
+        getSidebarSettings: () => ({
+          ...defaultSidebarSettings,
+          inactiveThreadsEnabled: false,
+          childIconStyle: "provider",
+        }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+
+    await waitFor(() => {
+      const childList = screen.getByRole("list", { name: "Child threads" });
+      expect(
+        within(childList).getByRole("img", { name: "Codex" }),
+      ).toBeDefined();
+      expect(
+        within(childList).getByRole("img", { name: "Claude Code" }),
+      ).toBeDefined();
+    });
+  });
+
   it("ignores a settings load that answers after a newer one", async () => {
     const stale = deferred<typeof defaultSidebarSettings>();
     let loads = 0;

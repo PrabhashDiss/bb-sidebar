@@ -455,7 +455,10 @@ export function ThreadInbox({
     () => new Map(providers.map((provider) => [provider.id, provider])),
     [providers],
   );
-  const childDisplay = useChildThreadDisplayValue(sidebarSettings);
+  const childDisplay = useChildThreadDisplayValue(
+    sidebarSettings,
+    providerById,
+  );
   const childrenByParentId = useMemo(
     () => childThreadsByParent(threads, childDisplay.sort),
     [threads, childDisplay.sort],

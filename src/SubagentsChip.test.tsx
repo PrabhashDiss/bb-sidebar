@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import type { SidebarProvider } from "./ProviderGlyph";
 
 const app = await loadPluginApp(() => import("../app"));
 const childrenChip = app.threadHeaderActions.find(
@@ -44,6 +45,35 @@ function thread(
     ...overrides,
   };
 }
+
+function provider(id: string, displayName: string): SidebarProvider {
+  return {
+    id,
+    pluginId: `provider-${id}`,
+    displayName,
+    available: true,
+    maintenance: { health: true, usage: false, installation: true },
+    logoUrl: `/api/v1/system/providers/${id}/logo`,
+    capabilities: {
+      modelCatalogScope: "workspace",
+      permissionModes: ["full"],
+      supportsFork: true,
+      supportsNativeUserQuestion: false,
+      supportsServiceTier: false,
+      supportsSessionRewind: true,
+      supportsThreadArchive: false,
+      supportsThreadRename: false,
+    },
+    composerActions: [],
+  };
+}
+
+const providers = [
+  provider("codex", "Codex"),
+  provider("claude-code", "Claude Code"),
+  provider("acp-opencode", "opencode"),
+  provider("acp-cursor", "Cursor"),
+];
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -492,5 +522,90 @@ describe("SubagentsChip", () => {
         "Open child thread: New",
       ]),
     );
+  });
+
+  it("shows provider icons in popover rows when chosen", async () => {
+    renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({
+              id: "codex-child",
+              title: "Codex child",
+              parentThreadId: "parent",
+              providerId: "codex",
+            }),
+            thread({
+              id: "claude-child",
+              title: "Claude child",
+              parentThreadId: "parent",
+              providerId: "claude-code",
+            }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        providers: { status: "ready", providers },
+        rpc: {
+          getSidebarSettings: () => ({
+            ...defaultSidebarSettings,
+            childIconStyle: "provider",
+          }),
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "2 child threads" }));
+    await waitFor(() => {
+      const list = screen.getByRole("list", { name: "Child threads" });
+      expect(within(list).getByRole("img", { name: "Codex" })).toBeDefined();
+      expect(
+        within(list).getByRole("img", { name: "Claude Code" }),
+      ).toBeDefined();
+    });
+  });
+
+  it("shows each provider once, at most three, on the chip", async () => {
+    renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            ...["codex", "codex", "claude-code", "acp-opencode", "acp-cursor"].map(
+              (providerId, index) =>
+                thread({
+                  id: `child-${index}`,
+                  title: `Child ${index}`,
+                  parentThreadId: "parent",
+                  providerId,
+                  createdAt: 101 + index,
+                }),
+            ),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        providers: { status: "ready", providers },
+        rpc: {
+          getSidebarSettings: () => ({
+            ...defaultSidebarSettings,
+            childIconStyle: "provider",
+          }),
+        },
+      },
+    );
+    const trigger = screen.getByRole("button", { name: "5 child threads" });
+    await waitFor(() => {
+      const dots = trigger.querySelectorAll("[data-child-thread-dot]");
+      expect(
+        [...dots].map((dot) =>
+          dot.querySelector("[role=img]")?.getAttribute("aria-label"),
+        ),
+      ).toEqual(["Codex", "Claude Code", "opencode"]);
+    });
   });
 });

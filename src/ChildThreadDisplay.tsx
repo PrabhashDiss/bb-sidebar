@@ -1,20 +1,28 @@
 import { createContext, useContext, useMemo } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import { Disc } from "./Disc";
+import { ProviderGlyph, type SidebarProvider } from "./ProviderGlyph";
 import {
   childThreadSortOf,
+  DEFAULT_SIDEBAR_SETTINGS,
+  type ChildThreadIconStyle,
   type ChildThreadSort,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
 
 /**
- * How child threads are ordered wherever they appear: the sidebar list, the
- * header popover, the parent's badge, and hover cards.
+ * How child threads are drawn and ordered wherever they appear: the sidebar
+ * list, the header popover, the parent's badge, and hover cards.
  */
 export interface ChildThreadDisplay {
+  iconStyle: ChildThreadIconStyle;
+  providerById: ReadonlyMap<string, SidebarProvider>;
   sort: ChildThreadSort;
 }
 
 export const ChildThreadDisplayContext = createContext<ChildThreadDisplay>({
+  iconStyle: DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
+  providerById: new Map(),
   sort: childThreadSortOf(null),
 });
 
@@ -25,9 +33,15 @@ export function useChildThreadDisplay(): ChildThreadDisplay {
 /** The context value for one surface, stable while its inputs are. */
 export function useChildThreadDisplayValue(
   settings: SidebarSettingsValues | null,
+  providerById: ReadonlyMap<string, SidebarProvider>,
 ): ChildThreadDisplay {
+  const iconStyle =
+    settings?.childIconStyle ?? DEFAULT_SIDEBAR_SETTINGS.childIconStyle;
   const { field, direction } = childThreadSortOf(settings);
-  return useMemo(() => ({ sort: { field, direction } }), [field, direction]);
+  return useMemo(
+    () => ({ iconStyle, providerById, sort: { field, direction } }),
+    [iconStyle, providerById, field, direction],
+  );
 }
 
 export function compareChildThreads(
@@ -37,4 +51,27 @@ export function compareChildThreads(
   const sign = sort.direction === "descending" ? -1 : 1;
   return (left, right) =>
     sign * (left[key] - right[key] || left.createdAt - right.createdAt);
+}
+
+/**
+ * The mark before a child thread: its colour disc, or the agent it runs on
+ * when the user prefers to tell children apart by provider.
+ */
+export function ChildThreadIcon({
+  thread,
+  discClassName,
+}: {
+  thread: PluginSidebarThread;
+  discClassName?: string;
+}) {
+  const { iconStyle, providerById } = useChildThreadDisplay();
+  if (iconStyle === "provider") {
+    return (
+      <ProviderGlyph
+        providerId={thread.providerId}
+        provider={providerById.get(thread.providerId) ?? null}
+      />
+    );
+  }
+  return <Disc thread={thread} className={discClassName} />;
 }

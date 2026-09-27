@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  experimental_useProviders as useProviders,
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
   type PluginThreadHeaderActionProps,
@@ -38,7 +39,15 @@ export function SubagentsChip({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const sidebarSettings = useSidebarSettings();
 
-  const childDisplay = useChildThreadDisplayValue(sidebarSettings);
+  const { providers } = useProviders();
+  const providerById = useMemo(
+    () => new Map(providers.map((provider) => [provider.id, provider])),
+    [providers],
+  );
+  const childDisplay = useChildThreadDisplayValue(
+    sidebarSettings,
+    providerById,
+  );
   const children = childrenOf(threads, threadId, childDisplay.sort);
   const childrenByParent = useMemo(
     () => childThreadsByParent(threads, childDisplay.sort),
