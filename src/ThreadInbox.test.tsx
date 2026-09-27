@@ -1448,6 +1448,55 @@ describe("ThreadInbox", () => {
     );
   });
 
+  it("ignores a settings load that answers after a newer one", async () => {
+    const stale = deferred<typeof defaultSidebarSettings>();
+    let loads = 0;
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Parent" }),
+          thread({
+            id: "working",
+            title: "Working child",
+            parentThreadId: "parent",
+            indicator: "runtime",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: {
+        getSidebarSettings: () => {
+          loads += 1;
+          return loads === 1
+            ? stale.promise
+            : {
+                ...defaultSidebarSettings,
+                showRunningChildrenWhenCollapsed: false,
+              };
+        },
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+
+    await rendered.emitRealtime("sidebar-settings", {});
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("list", { name: "Child threads" }),
+      ).toBeNull(),
+    );
+
+    stale.resolve(defaultSidebarSettings);
+    await stale.promise;
+    await waitFor(() => expect(loads).toBe(2));
+    expect(screen.queryByRole("list", { name: "Child threads" })).toBeNull();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("bb-sidebar:settings-cache:v1") ?? "{}",
+      ).showRunningChildrenWhenCollapsed,
+    ).toBe(false);
+  });
+
   it("highlights the active grandchild row", () => {
     renderSlot(
       inbox,

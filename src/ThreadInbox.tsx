@@ -12,7 +12,6 @@ import {
   type PluginSidebarThread,
   type PluginThreadListProps,
   useRealtime,
-  useRpc,
   useSettings,
 } from "@get-bb/plugin-sdk/app";
 import {
@@ -38,6 +37,7 @@ import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { WorkingSinceContext, useWorkingSince } from "./useWorkingSince";
+import { useSidebarSettings } from "./useSidebarSettings";
 import { OpenPortsProvider } from "./OpenPorts";
 import {
   ALL_PROJECTS,
@@ -71,14 +71,7 @@ import {
   PROJECT_ICONS_CHANNEL,
   projectIconUrl,
 } from "./project-icons";
-import type { bbSidebarRpcContract } from "./server";
-import {
-  cachedSidebarSettings,
-  cacheSidebarSettings,
-  DEFAULT_SIDEBAR_SETTINGS,
-  SIDEBAR_SETTINGS_CHANNEL,
-  type SidebarSettingsValues,
-} from "./sidebar-settings";
+import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
 import {
   MAX_CHILD_EXPANSION,
   pruneChildExpansion,
@@ -384,24 +377,8 @@ export function ThreadInbox({
   const workingSince = useWorkingSince(threads);
   const { providers } = useProviders();
   const actions = useSidebarThreadActions();
-  const rpc = useRpc<typeof bbSidebarRpcContract>();
   const { values: legacySettings } = useSettings();
-  const [sidebarSettings, setSidebarSettings] =
-    useState<SidebarSettingsValues | null>(() => cachedSidebarSettings(rpc));
-  const loadSidebarSettings = useCallback(async () => {
-    try {
-      const result = await rpc.call("getSidebarSettings", {});
-      setSidebarSettings(cacheSidebarSettings(rpc, result));
-    } catch {
-      void 0; // Older test harnesses and a backend still reloading have no method yet.
-    }
-  }, [rpc]);
-  useEffect(() => {
-    void loadSidebarSettings();
-  }, [loadSidebarSettings]);
-  useRealtime(SIDEBAR_SETTINGS_CHANNEL, () => {
-    void loadSidebarSettings();
-  });
+  const sidebarSettings = useSidebarSettings();
   const lifecycle = useLifecycle(threads);
   const [projectIconRevision, setProjectIconRevision] = useState(0);
   useRealtime(PROJECT_ICONS_CHANNEL, () => {
