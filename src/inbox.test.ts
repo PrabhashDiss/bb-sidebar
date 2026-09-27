@@ -257,6 +257,61 @@ describe("child threads", () => {
     expect(children.map((t) => t.id)).toEqual(["a", "b"]);
   });
 
+  it("lists a thread's children by the configured sort", () => {
+    const threads = [
+      thread({ id: "parent" }),
+      thread({
+        id: "a",
+        parentThreadId: "parent",
+        createdAt: 10,
+        updatedAt: 30,
+      }),
+      thread({
+        id: "b",
+        parentThreadId: "parent",
+        createdAt: 20,
+        updatedAt: 25,
+      }),
+      thread({
+        id: "c",
+        parentThreadId: "parent",
+        createdAt: 30,
+        updatedAt: 40,
+      }),
+    ];
+
+    expect(
+      childrenOf(threads, "parent", {
+        field: "created",
+        direction: "descending",
+      }).map((t) => t.id),
+    ).toEqual(["c", "b", "a"]);
+    expect(
+      childrenOf(threads, "parent", {
+        field: "activity",
+        direction: "ascending",
+      }).map((t) => t.id),
+    ).toEqual(["b", "a", "c"]);
+    expect(
+      childrenOf(threads, "parent", {
+        field: "activity",
+        direction: "descending",
+      }).map((t) => t.id),
+    ).toEqual(["c", "a", "b"]);
+  });
+
+  it("groups children by parent in the configured sort", () => {
+    const children = childThreadsByParent(
+      [
+        thread({ id: "parent" }),
+        thread({ id: "a", parentThreadId: "parent", createdAt: 10 }),
+        thread({ id: "b", parentThreadId: "parent", createdAt: 20 }),
+      ],
+      { field: "created", direction: "descending" },
+    );
+    expect(children.get("parent")?.map((t) => t.id)).toEqual(["b", "a"]);
+  });
+
   it("excludes archived children from child helpers and attention counts", () => {
     const threads = [
       thread({ id: "parent" }),

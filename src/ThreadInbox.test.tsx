@@ -181,6 +181,39 @@ it("shows direct subthreads in the hover card and opens them by keyboard or clic
   expect(screen.queryByRole("dialog", { name: "Thread details" })).toBeNull();
 });
 
+it("orders hover card subthreads by the saved child sort", async () => {
+  renderSlot(inbox, listProps, {
+    sidebarThreads: {
+      status: "ready",
+      threads: [
+        thread({ id: "parent", title: "Parent work" }),
+        thread({ id: "old", parentThreadId: "parent", title: "Old", createdAt: 10 }),
+        thread({ id: "new", parentThreadId: "parent", title: "New", createdAt: 20 }),
+      ],
+      projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+    },
+    providers: { status: "ready", providers: defaultProviders },
+    rpc: {
+      getSidebarSettings: () => ({
+        ...defaultSidebarSettings,
+        inactiveThreadsEnabled: false,
+        childSortDirection: "descending",
+      }),
+      listLifecycle: () => ({ rows: [] }),
+    },
+  });
+  const row = await screen.findByRole("link", { name: "Parent work" });
+  act(() => row.focus());
+  const details = await screen.findByRole("dialog", { name: "Thread details" });
+  fireEvent.click(within(details).getByRole("button", { name: "Subthreads (2)" }));
+  await waitFor(() => {
+    const list = within(details).getByRole("list", { name: "Subthreads" });
+    expect(within(list).getAllByRole("button").map((item) => item.getAttribute("aria-label"))).toEqual([
+      "Open subthread: New", "Open subthread: Old",
+    ]);
+  });
+});
+
 it("shows port details in the thread hover card", async () => {
   localStorage.setItem("bb-sidebar:port-link-host:v1", "host_local");
   const openUrl = vi.fn(() => true);
@@ -1494,6 +1527,51 @@ describe("ThreadInbox", () => {
         screen.queryByRole("list", { name: "Child threads" }),
       ).toBeNull(),
     );
+  });
+
+  it("orders child rows by the saved child sort", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Parent" }),
+          thread({
+            id: "old",
+            title: "Old child",
+            parentThreadId: "parent",
+            createdAt: 10,
+            indicator: "runtime",
+          }),
+          thread({
+            id: "new",
+            title: "New child",
+            parentThreadId: "parent",
+            createdAt: 20,
+            indicator: "runtime",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      providers: { status: "ready", providers: defaultProviders },
+      rpc: {
+        getSidebarSettings: () => ({
+          ...defaultSidebarSettings,
+          inactiveThreadsEnabled: false,
+          childSortDirection: "descending",
+        }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+
+    await waitFor(() => {
+      const rows = within(
+        screen.getByRole("list", { name: "Child threads" }),
+      ).getAllByText(/child$/);
+      expect(rows.map((row) => row.textContent)).toEqual([
+        "New child",
+        "Old child",
+      ]);
+    });
   });
 
   it("ignores a settings load that answers after a newer one", async () => {

@@ -32,6 +32,10 @@ import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { SearchResults } from "./SearchResults";
 import { childThreadsByParent } from "./ChildThreadList";
+import {
+  ChildThreadDisplayContext,
+  useChildThreadDisplayValue,
+} from "./ChildThreadDisplay";
 import { useLifecycle, type LifecycleApi } from "./useLifecycle";
 import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
@@ -451,9 +455,10 @@ export function ThreadInbox({
     () => new Map(providers.map((provider) => [provider.id, provider])),
     [providers],
   );
+  const childDisplay = useChildThreadDisplayValue(sidebarSettings);
   const childrenByParentId = useMemo(
-    () => childThreadsByParent(threads),
-    [threads],
+    () => childThreadsByParent(threads, childDisplay.sort),
+    [threads, childDisplay.sort],
   );
   useEffect(() => {
     setExpandedChildParentIds((current) => {
@@ -1091,6 +1096,7 @@ export function ThreadInbox({
 
   return (
     <WorkingSinceContext.Provider value={workingSince}>
+    <ChildThreadDisplayContext.Provider value={childDisplay}>
     <OpenPortsProvider>
       <div className="flex min-h-0 flex-1 flex-col">
         {/* The one control the host has no equivalent for. Everything else in
@@ -1318,6 +1324,7 @@ export function ThreadInbox({
         </div>
       </div>
     </OpenPortsProvider>
+    </ChildThreadDisplayContext.Provider>
     </WorkingSinceContext.Provider>
   );
 }

@@ -25,23 +25,27 @@ import {
   childSubtree,
   type ChildStatusKind,
 } from "./child-status";
+import { childThreadSortOf, type ChildThreadSort } from "./sidebar-settings";
+import { compareChildThreads } from "./ChildThreadDisplay";
 
 const MAX_CHILD_DOTS = 3;
 
 export function childrenOf(
   threads: readonly PluginSidebarThread[],
   parentThreadId: string,
+  sort: ChildThreadSort = childThreadSortOf(null),
 ): PluginSidebarThread[] {
   return threads
     .filter(
       (thread) =>
         !thread.isArchived && thread.parentThreadId === parentThreadId,
     )
-    .sort((left, right) => left.createdAt - right.createdAt);
+    .sort(compareChildThreads(sort));
 }
 
 export function childThreadsByParent(
   threads: readonly PluginSidebarThread[],
+  sort: ChildThreadSort = childThreadSortOf(null),
 ): ReadonlyMap<string, readonly PluginSidebarThread[]> {
   const result = new Map<string, PluginSidebarThread[]>();
   for (const thread of threads) {
@@ -51,7 +55,7 @@ export function childThreadsByParent(
     result.set(thread.parentThreadId, siblings);
   }
   for (const siblings of result.values()) {
-    siblings.sort((left, right) => left.createdAt - right.createdAt);
+    siblings.sort(compareChildThreads(sort));
   }
   return result;
 }

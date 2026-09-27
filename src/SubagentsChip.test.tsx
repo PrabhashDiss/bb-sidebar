@@ -45,7 +45,43 @@ function thread(
   };
 }
 
-afterEach(cleanup);
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+const defaultSidebarSettings = {
+  snoozePresets: "30m, 2h, 1d, 1w",
+  inactiveThreadsEnabled: true,
+  inactiveAfterHours: 6,
+  showRunningChildrenWhenCollapsed: true,
+  autoSettleInactive: true,
+  autoSettleAfterDays: 3,
+  autoSettleOnMerge: true,
+  childSortField: "created",
+  childSortDirection: "ascending",
+  childIconStyle: "disc",
+};
+
+const orderedChildren = [
+  thread({ id: "parent", title: "Parent" }),
+  thread({ id: "old", title: "Old", parentThreadId: "parent", createdAt: 101 }),
+  thread({ id: "new", title: "New", parentThreadId: "parent", createdAt: 102 }),
+];
+
+function childRowNames(): string[] {
+  return within(screen.getByRole("list", { name: "Child threads" }))
+    .getAllByRole("button", { name: /^Open child thread:/ })
+    .map((row) => row.getAttribute("aria-label") ?? "");
+}
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 describe("SubagentsChip", () => {
   it.each([false, true])("loads execution details only on hover and handles failure=%s", async (fail) => {
@@ -375,5 +411,86 @@ describe("SubagentsChip", () => {
 
     expect(screen.queryByRole("region", { name: "Child threads" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("ignores a settings load that answers after a newer one", async () => {
+    const stale = deferred<typeof defaultSidebarSettings>();
+    let loads = 0;
+    const rendered = renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: orderedChildren,
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: {
+          getSidebarSettings: () => {
+            loads += 1;
+            return loads === 1
+              ? stale.promise
+              : { ...defaultSidebarSettings, childSortDirection: "descending" };
+          },
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "2 child threads" }));
+
+    await rendered.emitRealtime("sidebar-settings", {});
+    await waitFor(() =>
+      expect(childRowNames()).toEqual([
+        "Open child thread: New",
+        "Open child thread: Old",
+      ]),
+    );
+
+    stale.resolve(defaultSidebarSettings);
+    await stale.promise;
+    await waitFor(() => expect(loads).toBe(2));
+    expect(childRowNames()).toEqual([
+      "Open child thread: New",
+      "Open child thread: Old",
+    ]);
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("bb-sidebar:settings-cache:v1") ?? "{}",
+      ).childSortDirection,
+    ).toBe("descending");
+  });
+
+  it("orders the popover by the saved child sort and follows changes", async () => {
+    let remoteSettings = {
+      ...defaultSidebarSettings,
+      childSortDirection: "descending",
+    };
+    const rendered = renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: orderedChildren,
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        },
+        rpc: { getSidebarSettings: () => remoteSettings },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "2 child threads" }));
+    await waitFor(() =>
+      expect(childRowNames()).toEqual([
+        "Open child thread: New",
+        "Open child thread: Old",
+      ]),
+    );
+
+    remoteSettings = { ...defaultSidebarSettings, childSortDirection: "ascending" };
+    await rendered.emitRealtime("sidebar-settings", {});
+    await waitFor(() =>
+      expect(childRowNames()).toEqual([
+        "Open child thread: Old",
+        "Open child thread: New",
+      ]),
+    );
   });
 });

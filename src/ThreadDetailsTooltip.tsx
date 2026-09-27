@@ -16,6 +16,7 @@ import { StatusGlyph } from "./StatusGlyph";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { PROJECT_ICONS_CHANNEL, projectIconUrl } from "./project-icons";
 import { OpenPortDetails } from "./OpenPorts";
+import { compareChildThreads, useChildThreadDisplay } from "./ChildThreadDisplay";
 
 export function ThreadDetailsTooltip({
   thread,
@@ -58,6 +59,7 @@ export function ThreadDetailsTooltip({
     return () => { cancelled = true; };
   }, [call, thread.id, visible]);
 
+  const { sort: childSort } = useChildThreadDisplay();
   const provider = providers.find((entry) => entry.id === thread.providerId);
   const project = projects.find((entry) => entry.id === thread.projectId);
   const isWorktree =
@@ -66,7 +68,7 @@ export function ThreadDetailsTooltip({
   const status = thread.hasPendingInteraction ? "Needs you" : thread.indicatorLabel ?? "Idle";
   const subthreads = visible ? threads
     .filter((child) => !child.isArchived && child.parentThreadId === thread.id && child.id !== thread.id)
-    .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id)) : [];
+    .sort(compareChildThreads(childSort)) : [];
   const label = (
     <div className="flex flex-col gap-2">
       <div className="truncate text-xs font-semibold leading-4 text-popover-foreground">
