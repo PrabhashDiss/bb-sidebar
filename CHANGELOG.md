@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.2.24] - 2026-09-27
+
+### Fixed
+
+- A thread's hover card no longer lists pull requests from commands that only mention `gh pr create`, such as a search of another thread's log. Only commands that run it count.
+
 ## [0.2.23] - 2026-09-27
 
 ### Added
