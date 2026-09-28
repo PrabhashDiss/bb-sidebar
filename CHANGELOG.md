@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## [0.2.25] - 2026-09-28
+
+### Changed
+
+- Sorting Active by project now shows each project's name once, in a header with its icon and thread count, instead of on every card. Cards under a header are a line shorter: the title sits beside the status.
+
+### Added
+
+- Project headers collapse. The choice is remembered, and a collapsed project still shows the open thread.
+
 ## [0.2.24] - 2026-09-27
 
 ### Fixed
