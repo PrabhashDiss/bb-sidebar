@@ -9,6 +9,7 @@ const PLUGIN_STORAGE_KEYS = [
   "bb-sidebar:inbox-order-cache:v1",
   "bb-sidebar:lifecycle-cache:v1",
   "bb-sidebar:child-expansion:v1",
+  "bb-sidebar:project-collapse:v1",
   "bb-sidebar:shelf-expansion:v1",
   "bb-sidebar:active-sort:v1",
   "bb-sidebar:settings-cache:v1",

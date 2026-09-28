@@ -1181,10 +1181,8 @@ describe("ThreadInbox", () => {
       }),
     ).toBeDefined();
     expect(
-      within(activeShelf)
-        .getByRole("list", { name: "Alpha active threads" })
-        .classList.contains("border"),
-    ).toBe(true);
+      within(activeShelf).getByRole("button", { name: "Alpha (2)", expanded: true }),
+    ).toBeDefined();
     expect(
       within(activeShelf)
         .getAllByRole("link")
@@ -1220,31 +1218,69 @@ describe("ThreadInbox", () => {
     );
   });
 
-  it("outlines only project groups with more than one thread", () => {
+  it("names each project once, in a header above its threads", () => {
     window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
     render(
       [
-        thread({ id: "alpha-1", projectId: "alpha", title: "Alpha one" }),
-        thread({ id: "alpha-2", projectId: "alpha", title: "Alpha two" }),
-        thread({ id: "beta-1", projectId: "beta", title: "Beta one" }),
+        thread({ id: "web-1", projectId: "web", title: "First" }),
+        thread({ id: "web-2", projectId: "web", title: "Second" }),
+        thread({ id: "api-1", projectId: "api", title: "Third" }),
       ],
       [
-        { id: "alpha", name: "Alpha", isPersonal: false },
-        { id: "beta", name: "Beta", isPersonal: false },
+        { id: "web", name: "Web", isPersonal: false },
+        { id: "api", name: "Api", isPersonal: false },
       ],
     );
 
-    const repeatedProject = screen.getByRole("list", {
-      name: "Alpha active threads",
-    });
-    const singleThreadProject = screen.getByRole("list", {
-      name: "Beta active threads",
-    });
-    expect(repeatedProject.classList.contains("border")).toBe(true);
-    expect(repeatedProject.className).not.toContain("shadow");
-    expect(repeatedProject.className).not.toContain("bg-");
-    expect(singleThreadProject.classList.contains("border")).toBe(false);
-    expect(singleThreadProject.classList.contains("p-px")).toBe(false);
+    const headers = screen.getAllByRole("button", { name: /\(\d+\)$/ });
+    expect(headers.map((header) => header.getAttribute("aria-label"))).toEqual([
+      "Api (1)",
+      "Web (2)",
+    ]);
+    for (const row of screen.getAllByRole("listitem")) {
+      expect(row.textContent).not.toMatch(/Web|Api/);
+    }
+    expect(
+      screen.getByRole("list", { name: "Web active threads" }).className,
+    ).not.toContain("border");
+  });
+
+  it("collapses a project, keeping the open thread and the choice", async () => {
+    window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "web-2" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "web-1", projectId: "web", title: "First" }),
+            thread({ id: "web-2", projectId: "web", title: "Second" }),
+            thread({ id: "api-1", projectId: "api", title: "Third" }),
+          ],
+          projects: [
+            { id: "web", name: "Web", isPersonal: false },
+            { id: "api", name: "Api", isPersonal: false },
+          ],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Web (2)" }));
+    expect(
+      screen.getByRole("button", { name: "Web (2)" }).getAttribute("aria-expanded"),
+    ).toBe("false");
+    const web = screen.getByRole("list", { name: "Web active threads" });
+    expect(
+      within(web).getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([expect.stringContaining("Second")]);
+    expect(screen.getByText("Third")).toBeDefined();
+    await waitFor(() =>
+      expect(
+        window.localStorage.getItem("bb-sidebar:project-collapse:v1"),
+      ).toBe(JSON.stringify(["web"])),
+    );
   });
 
   it("lists threads newest first", () => {
@@ -4911,7 +4947,9 @@ describe("row context menu", () => {
 
       const active = await screen.findByRole("region", { name: "Active" });
       if (collapsed) {
-        fireEvent.click(within(active).getByRole("button", { expanded: true }));
+        fireEvent.click(
+          within(active).getByRole("button", { name: "Active", expanded: true }),
+        );
       }
       const current = within(active).getByText("Current").closest("li")!;
       await parkFromCard(current, action);

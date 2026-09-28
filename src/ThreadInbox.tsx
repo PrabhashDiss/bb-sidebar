@@ -28,6 +28,7 @@ import {
   SelectTrigger,
 } from "./components/Select";
 import { ProjectScopeSelect } from "./ProjectScopeSelect";
+import { ProjectFavicon } from "./ProjectFavicon";
 import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { SearchResults } from "./SearchResults";
@@ -86,8 +87,23 @@ const ACTIVE_GROUPING_STORAGE_KEY = "bb-sidebar:active-grouping:v1";
 const ACTIVE_SORT_STORAGE_KEY = "bb-sidebar:active-sort:v1";
 const SHELF_EXPANSION_STORAGE_KEY = "bb-sidebar:shelf-expansion:v1";
 const CHILD_EXPANSION_STORAGE_KEY = "bb-sidebar:child-expansion:v1";
+const PROJECT_COLLAPSE_STORAGE_KEY = "bb-sidebar:project-collapse:v1";
 const SETTLED_INITIAL_LIMIT = 10;
 const SETTLED_PAGE_SIZE = 25;
+
+function readCollapsedProjects(): Set<string> {
+  try {
+    const stored = window.localStorage.getItem(PROJECT_COLLAPSE_STORAGE_KEY);
+    if (!stored) return new Set();
+    const parsed = JSON.parse(stored) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed.filter((value): value is string => typeof value === "string"),
+    );
+  } catch {
+    return new Set();
+  }
+}
 
 function readChildExpansion(): Set<string> {
   try {
@@ -432,6 +448,9 @@ export function ThreadInbox({
     useState<Set<string>>(readChildExpansion);
   const [activeSortMode, setActiveSortMode] =
     useState<ActiveSortMode>(readActiveSort);
+  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
+    readCollapsedProjects,
+  );
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
   useEffect(() => {
     const pruned = pruneChildExpansion([...expandedChildParentIds]);
@@ -451,6 +470,13 @@ export function ThreadInbox({
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects],
   );
+  useEffect(() => {
+    // Forget removed projects, but not before the project list has loaded.
+    const ids = [...collapsedProjectIds].filter(
+      (id) => projectNameById.size === 0 || projectNameById.has(id),
+    );
+    safeSetItem(PROJECT_COLLAPSE_STORAGE_KEY, JSON.stringify(ids));
+  }, [collapsedProjectIds, projectNameById]);
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider])),
     [providers],
@@ -621,13 +647,33 @@ export function ThreadInbox({
   );
   const inboxProjectGroups = useMemo(
     () =>
-      groupActiveThreadsByProject(
-        [],
-        visibleInbox,
-        projectNameById,
+      groupActiveThreadsByProject([], visibleInbox, projectNameById).map(
+        (group) => {
+          const expanded = !collapsedProjectIds.has(group.projectId);
+          // A collapsed project still shows the open thread, like a shelf.
+          const shown = new Set(
+            visibleShelfThreads(
+              group.entries.map((entry) => entry.thread),
+              expanded,
+              activeListThreadId,
+            ),
+          );
+          return {
+            ...group,
+            expanded,
+            threadCount: group.entries.length,
+            entries: group.entries.filter((entry) => shown.has(entry.thread)),
+          };
+        },
       ),
-    [projectNameById, visibleInbox],
+    [activeListThreadId, collapsedProjectIds, projectNameById, visibleInbox],
   );
+  const toggleProjectCollapse = (projectId: string) =>
+    setCollapsedProjectIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(projectId)) next.add(projectId);
+      return next;
+    });
   // Leaving a thread follows Pinned, then Active, including collapsed rows.
   const nextThreadCandidates = useMemo(
     () => [
@@ -655,15 +701,19 @@ export function ThreadInbox({
   });
   reorderTargetsRef.current = { pinned: pinnedReorder, inbox: inboxReorder };
   const visibleReorderIds = useCallback(
-    (thread: PluginSidebarThread, shelf: "pinned" | "inbox") =>
-      (shelf === "pinned" ? visiblePinned : visibleInbox)
-        .filter(
-          (candidate) =>
-            activeSortMode !== "project" ||
-            candidate.projectId === thread.projectId,
-        )
-        .map((candidate) => candidate.id),
-    [activeSortMode, visibleInbox, visiblePinned],
+    (thread: PluginSidebarThread, shelf: "pinned" | "inbox") => {
+      if (shelf === "inbox" && activeSortMode === "project") {
+        return (
+          inboxProjectGroups
+            .find((group) => group.projectId === thread.projectId)
+            ?.entries.map((entry) => entry.thread.id) ?? []
+        );
+      }
+      return (shelf === "pinned" ? visiblePinned : visibleInbox).map(
+        (candidate) => candidate.id,
+      );
+    },
+    [activeSortMode, inboxProjectGroups, visibleInbox, visiblePinned],
   );
   const visibleReorderIdsRef = useRef(visibleReorderIds);
   visibleReorderIdsRef.current = visibleReorderIds;
@@ -1061,6 +1111,7 @@ export function ThreadInbox({
     thread: PluginSidebarThread,
     shelf: ActiveShelfKind,
     reorderable = true,
+    showProject = true,
   ) => (
     <ThreadCard
       key={thread.id}
@@ -1068,6 +1119,7 @@ export function ThreadInbox({
       provider={providerById.get(thread.providerId) ?? null}
       projectName={projectNameById.get(thread.projectId) ?? null}
       projectIconUrl={projectIconUrl(thread.projectId, projectIconRevision)}
+      showProject={showProject}
       isActive={thread.id === activeThreadId}
       isWoke={wokeThreadIds.has(thread.id)}
       canPark={lifecycle.canPark(thread)}
@@ -1213,7 +1265,11 @@ export function ThreadInbox({
                     <ProjectGroups
                       groups={inboxProjectGroups}
                       projectNameById={projectNameById}
-                      renderThread={renderActiveThread}
+                      projectIconRevision={projectIconRevision}
+                      onToggle={toggleProjectCollapse}
+                      renderThread={(thread, shelf) =>
+                        renderActiveThread(thread, shelf, true, false)
+                      }
                     />
                   ) : visibleInbox.length > 0 ? (
                     <Shelf label={null}>
@@ -1578,48 +1634,88 @@ function CollapsibleShelf({
 
 function ActiveProjectGroup({
   projectName,
+  projectIconUrl,
   threadCount,
+  expanded,
+  onToggle,
   children,
 }: {
   projectName: string;
+  projectIconUrl: string | null;
   threadCount: number;
+  expanded: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
   return (
-    <ul
-      ref={attachListAutoAnimateRef}
-      aria-label={`${projectName} active threads`}
-      className={cn(
-        "flex flex-col gap-px",
-        threadCount > 1 &&
-          "rounded-lg border border-sidebar-border/30 p-px",
-      )}
-    >
-      {children}
-    </ul>
+    <section aria-label={`${projectName} project`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-label={`${projectName} (${threadCount})`}
+        // Padded like a card, so the name lines up with every row's title and
+        // the chevron with every row's trailing glyph.
+        className="flex w-full items-center gap-1.5 px-2.5 pb-0.5 pt-2 text-left"
+      >
+        <ProjectFavicon src={projectIconUrl} className="size-3" />
+        <span className="min-w-0 truncate text-2xs font-medium text-muted-foreground">
+          {projectName}
+        </span>
+        <span className="shrink-0 text-2xs text-muted-foreground/50">
+          {threadCount}
+        </span>
+        <span className="h-px flex-1 bg-sidebar-border/50" />
+        <span className={TRAILING_GLYPH_BOX_CLASS}>
+          <Icon
+            name="ChevronDown"
+            className={cn(
+              "size-3 text-muted-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none",
+              expanded && "rotate-180",
+            )}
+          />
+        </span>
+      </button>
+      <ul
+        ref={attachListAutoAnimateRef}
+        aria-label={`${projectName} active threads`}
+        className="flex flex-col gap-px"
+      >
+        {children}
+      </ul>
+    </section>
   );
 }
 
 function ProjectGroups({
   groups,
   projectNameById,
+  projectIconRevision,
+  onToggle,
   renderThread,
 }: {
-  groups: readonly ActiveThreadGroup[];
+  groups: ReadonlyArray<
+    ActiveThreadGroup & { expanded: boolean; threadCount: number }
+  >;
   projectNameById: ReadonlyMap<string, string>;
+  projectIconRevision: number;
+  onToggle: (projectId: string) => void;
   renderThread: (
     thread: PluginSidebarThread,
     shelf: ActiveShelfKind,
   ) => React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col">
       {groups.map((group) => (
         <ActiveProjectGroup
           key={group.projectId}
           projectName={projectNameById.get(group.projectId) ?? "Project"}
-          threadCount={group.entries.length}
+          projectIconUrl={projectIconUrl(group.projectId, projectIconRevision)}
+          threadCount={group.threadCount}
+          expanded={group.expanded}
+          onToggle={() => onToggle(group.projectId)}
         >
           {group.entries.map(({ thread, shelf }) =>
             renderThread(thread, shelf),

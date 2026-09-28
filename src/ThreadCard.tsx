@@ -41,8 +41,9 @@ export interface ThreadReorderControls {
 
 /**
  * One thread as a three-line card: project and status, title, then branch and
- * activity. Status lives in the row instead of its position, so manual order
- * can stay fixed while work changes state.
+ * activity. Under a shared project header the project line is dropped and the
+ * title takes its place beside the status. Status lives in the row instead of
+ * its position, so manual order can stay fixed while work changes state.
  *
  * The row is a positioned container with a full-bleed anchor UNDER the
  * controls, the way bb's own thread row does it: a `<button>` inside an `<a>`
@@ -53,6 +54,7 @@ export function ThreadCard({
   provider,
   projectName,
   projectIconUrl,
+  showProject = true,
   isActive,
   isWoke,
   canPark,
@@ -75,6 +77,8 @@ export function ThreadCard({
   provider: SidebarProvider | null;
   projectName: string | null;
   projectIconUrl: string | null;
+  /** False when a group header already names the project. */
+  showProject?: boolean;
   isActive: boolean;
   /** A snooze ended and has not yet been acknowledged. */
   isWoke: boolean;
@@ -138,6 +142,25 @@ export function ThreadCard({
       </button>
     </Tooltip>
   ) : null;
+
+  const titleLine = (
+    <div
+      data-row-emphasis={emphasis}
+      className={cn(
+        "pointer-events-none relative truncate text-sm",
+        showProject ? "mt-0.5" : "min-w-0 flex-1",
+        isRenaming && "pointer-events-auto",
+        emphasis === "read-idle" ? "text-muted-foreground" : "text-foreground",
+        (emphasis === "unread" || emphasis === "woke") && "font-medium",
+      )}
+    >
+      <InlineThreadTitle
+        thread={thread}
+        editing={isRenaming}
+        onEditingChange={setIsRenaming}
+      />
+    </div>
+  );
 
   return (
     <RowContextMenu
@@ -216,12 +239,16 @@ export function ThreadCard({
             />
           </ThreadDetailsTooltip>
           <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
-            <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
-              {projectName ? (
-                <ProjectFavicon src={projectIconUrl} className="size-3" />
-              ) : null}
-              <span className="min-w-0 truncate">{projectName ?? " "}</span>
-            </span>
+            {showProject ? (
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
+                {projectName ? (
+                  <ProjectFavicon src={projectIconUrl} className="size-3" />
+                ) : null}
+                <span className="min-w-0 truncate">{projectName ?? " "}</span>
+              </span>
+            ) : (
+              titleLine
+            )}
             {isWoke ? (
               <span className={cn(STATUS_SLOT_CLASS, "w-auto gap-1.5")}>
                 {unpinButton}
@@ -249,13 +276,21 @@ export function ThreadCard({
                   showParkActions &&
                     "[@media(hover:none)]:w-auto [@media(hover:none)]:gap-1.5",
                   !showParkActions && "w-auto min-w-20",
+                  // Beside the title a fixed slot would cut every title short,
+                  // so it hugs the time and widens only while the actions show.
+                  !showProject && "w-auto min-w-0",
+                  !showProject &&
+                    showParkActions &&
+                    "[@media(hover:hover)]:group-hover/card:min-w-11 has-[:focus-visible]:min-w-11",
+                  !showProject && isSnoozeOpen && "min-w-11",
                 )}
               >
                 <span
                   className={cn(
                     "flex items-center justify-end gap-0.5 transition-opacity duration-150 ease-out motion-reduce:transition-none",
                     showParkActions &&
-                      "absolute inset-y-0 right-0 [@media(hover:hover)]:group-hover/card:opacity-0 [@media(hover:hover)]:group-has-[:focus-visible]/status-slot:opacity-0 [@media(hover:none)]:static [@media(hover:none)]:opacity-100",
+                      "[@media(hover:hover)]:group-hover/card:opacity-0 [@media(hover:hover)]:group-has-[:focus-visible]/status-slot:opacity-0 [@media(hover:none)]:static [@media(hover:none)]:opacity-100",
+                    showParkActions && showProject && "absolute inset-y-0 right-0",
                     isSnoozeOpen &&
                       "opacity-0 [@media(hover:none)]:opacity-100",
                   )}
@@ -288,23 +323,7 @@ export function ThreadCard({
               </span>
             )}
           </div>
-          <div
-            data-row-emphasis={emphasis}
-            className={cn(
-              "pointer-events-none relative mt-0.5 truncate text-sm",
-              isRenaming && "pointer-events-auto",
-              emphasis === "read-idle"
-                ? "text-muted-foreground"
-                : "text-foreground",
-              (emphasis === "unread" || emphasis === "woke") && "font-medium",
-            )}
-          >
-            <InlineThreadTitle
-              thread={thread}
-              editing={isRenaming}
-              onEditingChange={setIsRenaming}
-            />
-          </div>
+          {showProject ? titleLine : null}
           <div className="pointer-events-none relative mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
             {/* A thread without a worktree still runs somewhere, so the
                 machine takes the branch's place rather than leaving the line
