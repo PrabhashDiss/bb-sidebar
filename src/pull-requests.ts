@@ -10,7 +10,11 @@ export const threadPullRequestSchema = z.object({
 export type ThreadPullRequest = z.infer<typeof threadPullRequestSchema>;
 
 const PULL_REQUEST_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g;
-const CREATE_COMMAND = /\bgh\s+pr\s+create\b/;
+// `gh pr create` run as a command: at the start, after a shell separator, or
+// as the script of a `zsh -lc "..."` wrapper (how Codex records commands).
+// Mentions inside quotes or prose, like a grep for the phrase, do not count.
+const CREATE_COMMAND =
+  /(?:^(?:[\w./-]*\/)?(?:ba|z)?sh\s+-[a-z]*c\s+["']|^|[\n;&|(])\s*(?:\w+=\S*\s+)*(?:[\w./-]*\/)?gh\s+pr\s+create\b/;
 
 /**
  * PR URLs printed by `gh pr create` commands, in the order they appeared. A

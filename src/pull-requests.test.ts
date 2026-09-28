@@ -15,6 +15,25 @@ describe("createdPullRequestUrls", () => {
     ])).toEqual(["https://github.com/o/r/pull/12", "https://github.com/o/r/pull/13"]);
   });
 
+  it("finds gh pr create wherever a shell runs it", () => {
+    const url = (number: number) => `https://github.com/o/r/pull/${number}`;
+    expect(createdPullRequestUrls([
+      command('/bin/zsh -lc "gh pr create --base main"', url(1)),
+      command("/bin/zsh -c 'gh pr create --fill'", url(2)),
+      command("git push -u origin a\n gh pr create -R o/r", url(3)),
+      command("cat > body.md <<'EOF'\nText\nEOF\ngit push && GH_PROMPT_DISABLED=1 /opt/homebrew/bin/gh pr create", url(4)),
+      command("url=$(gh pr create --fill); echo $url", url(5)),
+    ])).toEqual([1, 2, 3, 4, 5].map(url));
+  });
+
+  it("ignores commands that only mention gh pr create", () => {
+    expect(createdPullRequestUrls([
+      command("bb thread search \"gh pr create\" --json", "https://github.com/o/r/pull/1"),
+      command("bb thread log thr_a --json | python3 -c \"\nif 'gh pr create' in s: print(s)\"", "https://github.com/o/r/pull/2"),
+      command("grep -rn 'opened with `gh pr create`' CHANGELOG.md", "https://github.com/o/r/pull/3"),
+    ])).toEqual([]);
+  });
+
   it("ignores PRs a thread only read about", () => {
     expect(createdPullRequestUrls([
       command("gh pr view 7", "https://github.com/o/r/pull/7"),
