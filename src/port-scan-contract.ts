@@ -1,14 +1,19 @@
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { openPortSchema } from "./open-ports";
-import { ownedPortTargetSchema, closePortsResultSchema } from "./close-owned-ports";
+import { ownedPortTargetSchema, closePortsResultSchema, portCloseScopeSchema } from "./close-owned-ports";
 import { threadPullRequestSchema } from "./pull-requests";
 
 const rootSchema = z.object({ environmentId: z.string(), path: z.string().min(1) });
 export type PortRoot = z.infer<typeof rootSchema>;
 export const portScanContract = defineRpcContract({
   closeOwnedPorts: {
-    input: z.object({ root: rootSchema, threadId: z.string().min(1), ports: z.array(ownedPortTargetSchema).min(1).max(1000) }),
+    // Optional so an older host, which drops the field, falls back to the
+    // stricter thread-owned check instead of failing the call.
+    input: z.object({
+      root: rootSchema, threadId: z.string().min(1), ports: z.array(ownedPortTargetSchema).min(1).max(1000),
+      scope: portCloseScopeSchema.optional(),
+    }),
     output: closePortsResultSchema,
   },
   // The plugin's only host entry, so it also runs `gh` where the thread's

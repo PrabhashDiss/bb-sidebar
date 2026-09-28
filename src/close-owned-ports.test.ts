@@ -27,6 +27,18 @@ describe("closing thread-owned ports", () => {
     expect(result.skipped).toEqual([3000, 4000, 5000]);
   });
 
+  it("stops a workspace listener another thread or the user started, only while it still holds the port", async () => {
+    const terminate = vi.fn();
+    const listeners: OpenPort[] = [
+      { port: 3000, pid: 10, source: "process" },
+      { port: 4000, pid: 20, source: "process", ownerThreadId: "thr_b" },
+      { port: 5000, pid: 30, source: "docker" },
+    ];
+    const result = await closeOwnedPortProcesses("thr_a", [{ port: 3000, pid: 10 }, { port: 4000, pid: 20 }, { port: 5000, pid: 30 }, { port: 6000, pid: 10 }], async () => listeners, terminate, "workspace");
+    expect(terminate.mock.calls).toEqual([[10], [20]]);
+    expect(result).toEqual({ signalled: [3000, 6000, 4000], skipped: [5000], failed: [] });
+  });
+
   it("rechecks between processes and reports shutdown failures", async () => {
     const scan = vi.fn()
       .mockResolvedValueOnce([{ port: 3000, pid: 10, source: "process", ownerThreadId: "thr_a" }])

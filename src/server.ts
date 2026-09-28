@@ -205,6 +205,10 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: threadIdSchema.extend({ ports: z.array(ownedPortTargetSchema).min(1).max(1000) }),
     output: closePortsResultSchema,
   },
+  stopWorkspacePort: {
+    input: threadIdSchema.extend({ port: ownedPortTargetSchema }).strict(),
+    output: closePortsResultSchema,
+  },
   getOpenPorts: {
     input: z.object({}).strict(),
     output: portSnapshotSchema,
@@ -1194,6 +1198,13 @@ export default async function plugin(bb: BbPluginApi) {
       }
       try {
         return await threadPortActions.closeThreadPorts(input);
+      } finally {
+        getOpenPorts.invalidate();
+      }
+    },
+    async stopWorkspacePort({ threadId, port }) {
+      try {
+        return await threadPortActions.closeThreadPorts({ threadId, ports: [port], scope: "workspace" });
       } finally {
         getOpenPorts.invalidate();
       }

@@ -148,10 +148,11 @@ export default experimental_defineHostEntry({
     async pullRequests({ urls }, { signal }) {
       return viewPullRequests(urls, signal);
     },
-    async closeOwnedPorts({ root, threadId, ports }, { signal }) {
+    async closeOwnedPorts({ root, threadId, ports, scope }, { signal }) {
       return closeOwnedPortProcesses(threadId, ports, async () =>
-        (await scanPorts([root], signal)).ports,
+        (await scanPorts([root], signal)).ports.filter((port) => port.environmentId === root.environmentId),
         (pid) => { signal.throwIfAborted(); process.kill(pid, "SIGTERM"); },
+        scope,
       );
     },
   },

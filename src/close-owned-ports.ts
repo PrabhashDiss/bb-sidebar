@@ -10,20 +10,29 @@ export const closePortsResultSchema = z.object({
   skipped: z.array(z.number()),
   failed: z.array(z.number()),
 });
+export const portCloseScopeSchema = z.enum(["thread", "workspace"]);
 export type OwnedPortTarget = z.infer<typeof ownedPortTargetSchema>;
+export type PortCloseScope = z.infer<typeof portCloseScopeSchema>;
 
-/** Recheck each process against live ownership, never just a cached PID. */
+/**
+ * Recheck each process against live ownership, never just a cached PID.
+ * "thread" stops only processes the thread started; "workspace" also stops
+ * any process still listening inside the thread's workspace, for a user who
+ * picked that one port by hand.
+ */
 export async function closeOwnedPortProcesses(
   threadId: string,
   targets: OwnedPortTarget[],
   scan: () => Promise<OpenPort[]>,
   terminate: (pid: number) => void,
+  scope: PortCloseScope = "thread",
 ) {
   const result: z.infer<typeof closePortsResultSchema> = { signalled: [], skipped: [], failed: [] };
   for (const pid of new Set(targets.map((target) => target.pid))) {
     const requested = targets.filter((target) => target.pid === pid);
     const current = await scan();
-    const owned = current.filter((port) => port.pid === pid && port.source === "process" && port.ownerThreadId === threadId);
+    const owned = current.filter((port) => port.pid === pid && port.source === "process" &&
+      (scope === "workspace" || port.ownerThreadId === threadId));
     if (!requested.some((target) => owned.some((port) => port.port === target.port))) {
       result.skipped.push(...requested.map((target) => target.port));
       continue;

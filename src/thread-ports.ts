@@ -1,6 +1,6 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { portScanContract } from "./port-scan-contract";
-import type { OwnedPortTarget } from "./close-owned-ports";
+import type { OwnedPortTarget, PortCloseScope } from "./close-owned-ports";
 
 export function createThreadPortActions(bb: BbPluginApi) {
   const host = bb.hosts.experimental_client({ contract: portScanContract });
@@ -23,10 +23,10 @@ export function createThreadPortActions(bb: BbPluginApi) {
       const result = await host.call("scan", { roots: [target.root] }, target.options);
       return { ports: result.ports.filter((port) => port.environmentId === target.root.environmentId && port.ownerThreadId === threadId && port.source === "process" && port.pid && port.pid > 1).map((port) => ({ port: port.port, pid: port.pid! })) };
     },
-    async closeThreadPorts({ threadId, ports }: { threadId: string; ports: OwnedPortTarget[] }) {
+    async closeThreadPorts({ threadId, ports, scope = "thread" }: { threadId: string; ports: OwnedPortTarget[]; scope?: PortCloseScope }) {
       const target = await context(threadId);
       if (!target) throw new Error("Thread has no workspace");
-      return host.call("closeOwnedPorts", { root: target.root, threadId, ports }, target.options);
+      return host.call("closeOwnedPorts", { root: target.root, threadId, ports, scope }, target.options);
     },
   };
 }
