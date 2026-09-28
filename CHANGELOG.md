@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.2.23] - 2026-09-27
+
+### Added
+
+- Hover cards have a collapsible **Pull requests** section listing every pull request a thread opened with `gh pr create`, newest first, with each PR's title and status. Before, only the PR on the thread's current branch was shown. Status comes from `gh` on the thread's machine; without it, the list still shows PR numbers and links. In a shared project checkout, a thread lists only the PRs it opened, not the checkout branch's PR.
+
 ## [0.2.22] - 2026-09-27
 
 ### Added
