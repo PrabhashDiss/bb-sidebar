@@ -1,0 +1,62 @@
+// Pull request records shared by the server, host entry, and hover card.
+import { z } from "zod";
+
+export const threadPullRequestSchema = z.object({
+  url: z.string(),
+  number: z.number().int(),
+  title: z.string().nullable(),
+  state: z.enum(["open", "draft", "merged", "closed"]).nullable(),
+}).strict();
+export type ThreadPullRequest = z.infer<typeof threadPullRequestSchema>;
+
+const PULL_REQUEST_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g;
+const CREATE_COMMAND = /\bgh\s+pr\s+create\b/;
+
+/**
+ * PR URLs printed by `gh pr create` commands, in the order they appeared. A
+ * failed create that reports "a pull request already exists" names the
+ * thread's PR too, so the command status is not checked.
+ */
+export function createdPullRequestUrls(events: readonly { type: string; data: unknown }[]): string[] {
+  const urls = new Set<string>();
+  for (const event of events) {
+    if (event.type !== "item/completed") continue;
+    const item = (event.data as { item?: unknown } | null)?.item as
+      | { type?: unknown; command?: unknown; aggregatedOutput?: unknown }
+      | undefined;
+    if (item?.type !== "commandExecution") continue;
+    if (typeof item.command !== "string" || !CREATE_COMMAND.test(item.command)) continue;
+    if (typeof item.aggregatedOutput !== "string") continue;
+    for (const [url] of item.aggregatedOutput.matchAll(PULL_REQUEST_URL)) urls.add(url);
+  }
+  return [...urls];
+}
+
+export function pullRequestNumber(url: string): number {
+  return Number(url.slice(url.lastIndexOf("/") + 1));
+}
+
+/** Parses `gh pr view --json number,title,state,isDraft,url`. */
+export function parseGhPullRequest(output: string): ThreadPullRequest | null {
+  try {
+    const value = JSON.parse(output) as {
+      number?: unknown; title?: unknown; state?: unknown; isDraft?: unknown; url?: unknown;
+    };
+    if (typeof value.number !== "number" || typeof value.url !== "string") return null;
+    const state = value.state === "MERGED"
+      ? "merged"
+      : value.state === "CLOSED"
+        ? "closed"
+        : value.state === "OPEN"
+          ? value.isDraft === true ? "draft" : "open"
+          : null;
+    return {
+      url: value.url,
+      number: value.number,
+      title: typeof value.title === "string" ? value.title : null,
+      state,
+    };
+  } catch {
+    return null;
+  }
+}

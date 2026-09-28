@@ -64,3 +64,19 @@ describe("host port scan", () => {
     await expect(harness.experimental_call("scan", { roots }, { signal: controller.signal })).rejects.toThrow();
   });
 });
+
+describe("host pull request lookup", () => {
+  it("reads each PR with gh and skips the ones it cannot see", async () => {
+    mocks.run.mockImplementation(async (command: string, args: string[]) => {
+      if (command !== "gh") throw new Error(`Unexpected command ${command}`);
+      if (args[2]!.endsWith("/2")) throw new Error("Could not resolve to a PullRequest");
+      return { stdout: JSON.stringify({ number: 1, title: "Fix", state: "OPEN", isDraft: true, url: "https://github.com/new/r/pull/1" }) };
+    });
+    const result = await harness.experimental_call("pullRequests", {
+      urls: ["https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"],
+    });
+    expect(result.pullRequests).toEqual([
+      { url: "https://github.com/o/r/pull/1", number: 1, title: "Fix", state: "draft" },
+    ]);
+  });
+});

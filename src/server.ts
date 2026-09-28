@@ -40,6 +40,8 @@ import { configuredSnoozePresetError } from "./lifecycle";
 import { portSnapshotSchema } from "./open-ports";
 import { createPortDiscovery } from "./port-discovery";
 import { createThreadPortActions } from "./thread-ports";
+import { createThreadPullRequests } from "./thread-pull-requests";
+import { threadPullRequestSchema } from "./pull-requests";
 import { ownedPortTargetSchema, closePortsResultSchema } from "./close-owned-ports";
 
 const migrations = [
@@ -206,6 +208,10 @@ export const bbSidebarRpcContract = defineRpcContract({
   getOpenPorts: {
     input: z.object({}).strict(),
     output: portSnapshotSchema,
+  },
+  getThreadPullRequests: {
+    input: threadIdSchema.strict(),
+    output: z.object({ pullRequests: z.array(threadPullRequestSchema) }).strict(),
   },
   getThreadExecutionDetails: {
     input: threadIdSchema.strict(),
@@ -468,6 +474,7 @@ function iconMimeType(path: string, reported: string): string {
 export default async function plugin(bb: BbPluginApi) {
   const getOpenPorts = createPortDiscovery(bb);
   const threadPortActions = createThreadPortActions(bb);
+  const threadPullRequests = createThreadPullRequests(bb);
   const regenerateTitle = createTitleRegenerator(bb);
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
@@ -1180,6 +1187,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(bbSidebarRpcContract, {
     getOpenPorts,
     getThreadPorts: threadPortActions.getThreadPorts,
+    getThreadPullRequests: threadPullRequests.getThreadPullRequests,
     async closeThreadPorts(input) {
       if (readOne(input.threadId)?.settledOverride !== "settled") {
         throw new Error("Thread is no longer settled");

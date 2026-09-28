@@ -8,7 +8,6 @@ import {
   experimental_useSidebarThreadPullRequest as useSidebarThreadPullRequest,
   experimental_useSidebarThreadSplit as useSidebarThreadSplit,
   experimental_useSidebarThreadActions as useSidebarThreadActions,
-  type PluginSidebarPullRequest,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
@@ -22,6 +21,7 @@ import { Tooltip } from "./components/Tooltip";
 import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import { SnoozeSelect } from "./SnoozeSelect";
 import { cn } from "./lib/utils";
+import { pullRequestStatusLabel, pullRequestToneClass } from "./pull-request-display";
 import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph, type SidebarProvider } from "./ProviderGlyph";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
@@ -424,62 +424,6 @@ function ThreadLocation({ thread }: { thread: PluginSidebarThread }) {
     );
   }
   return <span className="flex-1" />;
-}
-
-function pullRequestStatusLabel(pullRequest: PluginSidebarPullRequest): string {
-  switch (pullRequest.attention) {
-    case "blocked":
-      return "Blocked";
-    case "changes_requested":
-      return "Changes requested";
-    case "checks_failed":
-      return "Checks failed";
-    case "checks_pending":
-      return "Checks pending";
-    case "conflicts":
-      return "Conflicts";
-    case "ready_to_merge":
-      return "Ready to merge";
-    case "review_requested":
-      return "Review requested";
-    case "draft":
-      return "Draft";
-    case "merged":
-      return "Merged";
-    case "closed":
-      return "Closed";
-    case "none":
-      return pullRequest.state === "open"
-        ? "Open"
-        : pullRequest.state[0]!.toUpperCase() + pullRequest.state.slice(1);
-  }
-}
-
-function pullRequestToneClass(pullRequest: PluginSidebarPullRequest): string {
-  if (pullRequest.state === "merged" || pullRequest.attention === "merged") {
-    return "text-[color:var(--bb-sidebar-pr-merged)]";
-  }
-  if (
-    pullRequest.attention === "blocked" ||
-    pullRequest.attention === "changes_requested" ||
-    pullRequest.attention === "checks_failed" ||
-    pullRequest.attention === "conflicts"
-  ) {
-    return "text-[color:var(--bb-sidebar-pr-alert)]";
-  }
-  if (
-    pullRequest.state === "draft" ||
-    pullRequest.attention === "draft"
-  ) {
-    return "text-muted-foreground/60";
-  }
-  if (pullRequest.state === "closed" || pullRequest.attention === "closed") {
-    return "text-[color:var(--bb-sidebar-pr-alert)]";
-  }
-  if (pullRequest.state === "open") {
-    return "text-[color:var(--bb-sidebar-pr-open)]";
-  }
-  return "text-muted-foreground";
 }
 
 function ParkButton({

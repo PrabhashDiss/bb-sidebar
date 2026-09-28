@@ -16,6 +16,7 @@ import { StatusGlyph } from "./StatusGlyph";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { PROJECT_ICONS_CHANNEL, projectIconUrl } from "./project-icons";
 import { OpenPortDetails } from "./OpenPorts";
+import { ThreadPullRequestDetails } from "./ThreadPullRequests";
 import { compareChildThreads, useChildThreadDisplay } from "./ChildThreadDisplay";
 
 export function ThreadDetailsTooltip({
@@ -157,6 +158,7 @@ export function ThreadDetailsTooltip({
             </ul> : null}
           </div>
         ) : null}
+        <ThreadPullRequestDetails thread={thread} />
         <OpenPortDetails thread={thread} />
       </div>
     </div>
