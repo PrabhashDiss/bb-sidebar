@@ -1238,9 +1238,6 @@ describe("ThreadInbox", () => {
         name: "Sort active threads: Project",
       }),
     ).toBeDefined();
-    expect(
-      screen.getByRole("list", { name: "bb active threads" }),
-    ).toBeDefined();
     await waitFor(() =>
       expect(window.localStorage.getItem("bb-sidebar:active-sort:v1")).toBe(
         "project",
@@ -1248,31 +1245,90 @@ describe("ThreadInbox", () => {
     );
   });
 
-  it("names each project once, in a header above its threads", () => {
+  it("names a project once in a header when it has two or more threads", () => {
     window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    window.localStorage.setItem(
+      "bb-sidebar:inbox-order-cache:v1",
+      JSON.stringify(["web-1", "zed-1", "web-2", "api-1"]),
+    );
     render(
       [
         thread({ id: "web-1", projectId: "web", title: "First" }),
+        thread({ id: "zed-1", projectId: "zed", title: "Loose Z" }),
         thread({ id: "web-2", projectId: "web", title: "Second" }),
-        thread({ id: "api-1", projectId: "api", title: "Third" }),
+        thread({ id: "api-1", projectId: "api", title: "Loose A" }),
       ],
       [
         { id: "web", name: "Web", isPersonal: false },
         { id: "api", name: "Api", isPersonal: false },
+        { id: "zed", name: "Zed", isPersonal: false },
       ],
     );
 
     const headers = screen.getAllByRole("button", { name: /\(\d+\)$/ });
     expect(headers.map((header) => header.getAttribute("aria-label"))).toEqual([
-      "Api (1)",
       "Web (2)",
     ]);
-    for (const row of screen.getAllByRole("listitem")) {
-      expect(row.textContent).not.toMatch(/Web|Api/);
-    }
+    // One-thread projects stay ordinary cards, in manual order, above groups.
     expect(
-      screen.getByRole("list", { name: "Web active threads" }).className,
-    ).not.toContain("border");
+      screen.getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([
+      expect.stringMatching(/^Zed.*Loose Z/),
+      expect.stringMatching(/^Api.*Loose A/),
+      expect.not.stringContaining("Web"),
+      expect.not.stringContaining("Web"),
+    ]);
+  });
+
+  it("hides project headers while Active is collapsed", async () => {
+    window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "web-2" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "web-1", projectId: "web", title: "First" }),
+            thread({ id: "web-2", projectId: "web", title: "Second" }),
+          ],
+          projects: [{ id: "web", name: "Web", isPersonal: false }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const active = await screen.findByRole("region", { name: "Active" });
+    expect(within(active).getByRole("button", { name: "Web (2)" })).toBeDefined();
+    fireEvent.click(
+      within(active).getByRole("button", { name: "Active", expanded: true }),
+    );
+    expect(within(active).queryByRole("button", { name: "Web (2)" })).toBeNull();
+    expect(
+      within(active).getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([expect.stringMatching(/^Web.*Second/)]);
+  });
+
+  it("looks like manual order when no project has a second thread", () => {
+    window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    render(
+      [
+        thread({ id: "zed-1", projectId: "zed", title: "Zed thread", createdAt: 2 }),
+        thread({ id: "api-1", projectId: "api", title: "Api thread", createdAt: 1 }),
+      ],
+      [
+        { id: "api", name: "Api", isPersonal: false },
+        { id: "zed", name: "Zed", isPersonal: false },
+      ],
+    );
+
+    expect(screen.queryAllByRole("button", { name: /\(\d+\)$/ })).toEqual([]);
+    expect(
+      screen.getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([
+      expect.stringMatching(/^Zed.*Zed thread/),
+      expect.stringMatching(/^Api.*Api thread/),
+    ]);
   });
 
   it("collapses a project, keeping the open thread and the choice", async () => {

@@ -334,6 +334,26 @@ function groupActiveThreadsByProject(
   );
 }
 
+// A project needs this many Active threads before it earns a header; below
+// it, its threads stay ordinary cards, so a list of one-thread projects reads
+// exactly like manual order.
+const MIN_PROJECT_GROUP_SIZE = 2;
+
+/** Loose threads keep manual order; grouped projects follow by name. */
+function layoutActiveThreadsByProject(
+  inbox: readonly PluginSidebarThread[],
+  projectNameById: ReadonlyMap<string, string>,
+): { loose: PluginSidebarThread[]; groups: ActiveThreadGroup[] } {
+  const groups = groupActiveThreadsByProject([], inbox, projectNameById).filter(
+    (group) => group.entries.length >= MIN_PROJECT_GROUP_SIZE,
+  );
+  const grouped = new Set(groups.map((group) => group.projectId));
+  return {
+    loose: inbox.filter((thread) => !grouped.has(thread.projectId)),
+    groups,
+  };
+}
+
 function sortActiveThreads(
   threads: readonly PluginSidebarThread[],
   mode: ActiveSortMode,
@@ -648,29 +668,46 @@ export function ThreadInbox({
     () => sortActiveThreads(visibleInbox, activeSortMode),
     [activeSortMode, visibleInbox],
   );
-  const inboxProjectGroups = useMemo(
-    () =>
-      groupActiveThreadsByProject([], visibleInbox, projectNameById).map(
-        (group) => {
-          const expanded = !collapsedProjectIds.has(group.projectId);
-          // A collapsed project still shows the open thread, like a shelf.
-          const shown = new Set(
-            visibleShelfThreads(
-              group.entries.map((entry) => entry.thread),
-              expanded,
-              activeListThreadId,
-            ),
-          );
-          return {
-            ...group,
-            expanded,
-            threadCount: group.entries.length,
-            entries: group.entries.filter((entry) => shown.has(entry.thread)),
-          };
-        },
-      ),
-    [activeListThreadId, collapsedProjectIds, projectNameById, visibleInbox],
+  // Laid out from every Active thread, not just the visible ones, so
+  // collapsing the shelf never turns a group back into loose cards.
+  const inboxProjectLayout = useMemo(
+    () => layoutActiveThreadsByProject(inbox, projectNameById),
+    [inbox, projectNameById],
   );
+  const inboxProjectView = useMemo(() => {
+    // A collapsed Active shelf hides its project headers too, leaving only
+    // the open thread, like every other collapsed shelf.
+    if (!expandedShelves.active) return { loose: visibleInbox, groups: [] };
+    const visible = new Set(visibleInbox);
+    return {
+      loose: inboxProjectLayout.loose.filter((thread) => visible.has(thread)),
+      groups: inboxProjectLayout.groups.map((group) => {
+        const expanded = !collapsedProjectIds.has(group.projectId);
+        // A collapsed project still shows the open thread, like a shelf.
+        const shown = new Set(
+          visibleShelfThreads(
+            group.entries
+              .map((entry) => entry.thread)
+              .filter((thread) => visible.has(thread)),
+            expanded,
+            activeListThreadId,
+          ),
+        );
+        return {
+          ...group,
+          expanded,
+          threadCount: group.entries.length,
+          entries: group.entries.filter((entry) => shown.has(entry.thread)),
+        };
+      }),
+    };
+  }, [
+    activeListThreadId,
+    collapsedProjectIds,
+    expandedShelves.active,
+    inboxProjectLayout,
+    visibleInbox,
+  ]);
   const toggleProjectCollapse = (projectId: string) =>
     setCollapsedProjectIds((current) => {
       const next = new Set(current);
@@ -682,12 +719,15 @@ export function ThreadInbox({
     () => [
       ...pinned,
       ...(activeSortMode === "project"
-        ? groupActiveThreadsByProject([], inbox, projectNameById).flatMap(
-            (group) => group.entries.map((entry) => entry.thread),
-          )
+        ? [
+            ...inboxProjectLayout.loose,
+            ...inboxProjectLayout.groups.flatMap((group) =>
+              group.entries.map((entry) => entry.thread),
+            ),
+          ]
         : sortActiveThreads(inbox, activeSortMode)),
     ],
-    [activeSortMode, inbox, pinned, projectNameById],
+    [activeSortMode, inbox, inboxProjectLayout, pinned],
   );
   const nextThreadCandidatesRef = useRef(nextThreadCandidates);
   nextThreadCandidatesRef.current = nextThreadCandidates;
@@ -706,17 +746,18 @@ export function ThreadInbox({
   const visibleReorderIds = useCallback(
     (thread: PluginSidebarThread, shelf: "pinned" | "inbox") => {
       if (shelf === "inbox" && activeSortMode === "project") {
-        return (
-          inboxProjectGroups
-            .find((group) => group.projectId === thread.projectId)
-            ?.entries.map((entry) => entry.thread.id) ?? []
+        const group = inboxProjectView.groups.find(
+          (candidate) => candidate.projectId === thread.projectId,
         );
+        return group
+          ? group.entries.map((entry) => entry.thread.id)
+          : inboxProjectView.loose.map((candidate) => candidate.id);
       }
       return (shelf === "pinned" ? visiblePinned : visibleInbox).map(
         (candidate) => candidate.id,
       );
     },
-    [activeSortMode, inboxProjectGroups, visibleInbox, visiblePinned],
+    [activeSortMode, inboxProjectView, visibleInbox, visiblePinned],
   );
   const visibleReorderIdsRef = useRef(visibleReorderIds);
   visibleReorderIdsRef.current = visibleReorderIds;
@@ -1267,12 +1308,13 @@ export function ThreadInbox({
                 >
                   {activeSortMode === "project" ? (
                     <ProjectGroups
-                      groups={inboxProjectGroups}
+                      loose={inboxProjectView.loose}
+                      groups={inboxProjectView.groups}
                       projectNameById={projectNameById}
                       projectIconRevision={projectIconRevision}
                       onToggle={toggleProjectCollapse}
-                      renderThread={(thread, shelf) =>
-                        renderActiveThread(thread, shelf, true, false)
+                      renderThread={(thread, shelf, grouped) =>
+                        renderActiveThread(thread, shelf, true, !grouped)
                       }
                     />
                   ) : visibleInbox.length > 0 ? (
@@ -1694,12 +1736,14 @@ function ActiveProjectGroup({
 }
 
 function ProjectGroups({
+  loose,
   groups,
   projectNameById,
   projectIconRevision,
   onToggle,
   renderThread,
 }: {
+  loose: readonly PluginSidebarThread[];
   groups: ReadonlyArray<
     ActiveThreadGroup & { expanded: boolean; threadCount: number }
   >;
@@ -1709,10 +1753,16 @@ function ProjectGroups({
   renderThread: (
     thread: PluginSidebarThread,
     shelf: ActiveShelfKind,
+    grouped: boolean,
   ) => React.ReactNode;
 }) {
   return (
     <div className="flex flex-col">
+      {loose.length > 0 ? (
+        <Shelf label={null}>
+          {loose.map((thread) => renderThread(thread, "inbox", false))}
+        </Shelf>
+      ) : null}
       {groups.map((group) => (
         <ActiveProjectGroup
           key={group.projectId}
@@ -1723,7 +1773,7 @@ function ProjectGroups({
           onToggle={() => onToggle(group.projectId)}
         >
           {group.entries.map(({ thread, shelf }) =>
-            renderThread(thread, shelf),
+            renderThread(thread, shelf, true),
           )}
         </ActiveProjectGroup>
       ))}
