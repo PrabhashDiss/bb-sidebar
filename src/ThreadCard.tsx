@@ -30,6 +30,7 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { OpenPortsIndicator } from "./OpenPorts";
+import { JumpHint, useJumpHint } from "./JumpHints";
 import "./settle-button.css";
 
 export interface ThreadReorderControls {
@@ -101,6 +102,7 @@ export function ThreadCard({
   now: number;
 }) {
   const actions = useSidebarThreadActions();
+  const jumpHint = useJumpHint(thread.id);
   const { splitProps, layout } = useSidebarThreadSplit(thread.id);
   // Opt-in per row: this costs a git-host lookup, and threads sharing a
   // worktree share one.
@@ -249,7 +251,13 @@ export function ThreadCard({
             ) : (
               titleLine
             )}
-            {isWoke ? (
+            {/* bb's own rows trade their trailing status for the shortcut
+                while the modifier is held; these do the same. */}
+            {jumpHint ? (
+              <span className={cn(STATUS_SLOT_CLASS, "w-auto")}>
+                <JumpHint label={jumpHint} />
+              </span>
+            ) : isWoke ? (
               <span className={cn(STATUS_SLOT_CLASS, "w-auto gap-1.5")}>
                 {unpinButton}
                 <Tooltip label="Dismiss Woke marker">

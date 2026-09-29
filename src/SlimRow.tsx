@@ -15,6 +15,7 @@ import { InlineThreadTitle } from "./InlineThreadTitle";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ThreadDetailsTooltip } from "./ThreadDetailsTooltip";
 import { OpenPortsIndicator } from "./OpenPorts";
+import { JumpHint, useJumpHint } from "./JumpHints";
 
 /**
  * A parked thread: one line instead of a card. Density comes from the user
@@ -55,6 +56,7 @@ export function SlimRow({
   onSnooze: (snoozedUntil: number) => void;
 }) {
   const actions = useSidebarThreadActions();
+  const jumpHint = useJumpHint(thread.id);
   const title = threadDisplayTitle(thread);
   const rowLabel = projectName ? `${projectName} · ${title}` : title;
   const [isRenaming, setIsRenaming] = useState(false);
@@ -150,48 +152,52 @@ export function SlimRow({
           {/* Size to the label so the port icon stays beside it. Keep enough
               room for the restore button, which replaces the label on hover.
               On touch devices, show both side by side. */}
-          <span
-            className="pointer-events-none relative flex min-w-5 shrink-0 items-center justify-end tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:gap-2"
-          >
-            <span className="flex items-center transition-opacity duration-150 ease-out [@media(hover:hover)]:group-hover/slim:opacity-0 motion-reduce:transition-none">
-              {shelf === "parked" && parkedAt != null ? (
-                `Waiting ${Math.max(0, Math.floor((now - parkedAt) / 86_400_000))}d`
-              ) : shelf === "snoozed" && wakeAt !== null ? (
-                snoozeWakeLabel(wakeAt, now)
-              ) : (
-                <StatusOrTime thread={thread} now={now} />
-              )}
-            </span>
-            <Tooltip
-              label={
-                shelf === "parked" ? "Resume thread" : shelf === "snoozed" ? "Wake thread now" : "Un-settle thread"
-              }
+          {jumpHint ? (
+            <JumpHint label={jumpHint} />
+          ) : (
+            <span
+              className="pointer-events-none relative flex min-w-5 shrink-0 items-center justify-end tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:gap-2"
             >
-              <button
-                type="button"
-                aria-label={
-                  shelf === "parked"
-                    ? "Resume thread"
-                    : shelf === "snoozed"
-                    ? "Wake thread now"
-                    : "Un-settle thread"
+              <span className="flex items-center transition-opacity duration-150 ease-out [@media(hover:hover)]:group-hover/slim:opacity-0 motion-reduce:transition-none">
+                {shelf === "parked" && parkedAt != null ? (
+                  `Waiting ${Math.max(0, Math.floor((now - parkedAt) / 86_400_000))}d`
+                ) : shelf === "snoozed" && wakeAt !== null ? (
+                  snoozeWakeLabel(wakeAt, now)
+                ) : (
+                  <StatusOrTime thread={thread} now={now} />
+                )}
+              </span>
+              <Tooltip
+                label={
+                  shelf === "parked" ? "Resume thread" : shelf === "snoozed" ? "Wake thread now" : "Un-settle thread"
                 }
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onRestore();
-                }}
-                // Pulled right by its own padding, so the icon — not the hit
-                // area — lands on the column.
-                className="pointer-events-auto absolute -right-0.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-150 ease-out hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 motion-reduce:transition-none"
               >
-                <Icon
-                  name={shelf === "snoozed" ? "Clock" : "ArrowTurnBackward"}
-                  className="size-3.5"
-                />
-              </button>
-            </Tooltip>
-          </span>
+                <button
+                  type="button"
+                  aria-label={
+                    shelf === "parked"
+                      ? "Resume thread"
+                      : shelf === "snoozed"
+                      ? "Wake thread now"
+                      : "Un-settle thread"
+                  }
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onRestore();
+                  }}
+                  // Pulled right by its own padding, so the icon — not the hit
+                  // area — lands on the column.
+                  className="pointer-events-auto absolute -right-0.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-150 ease-out hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 motion-reduce:transition-none"
+                >
+                  <Icon
+                    name={shelf === "snoozed" ? "Clock" : "ArrowTurnBackward"}
+                    className="size-3.5"
+                  />
+                </button>
+              </Tooltip>
+            </span>
+          )}
         </div>
       </li>
     </RowContextMenu>

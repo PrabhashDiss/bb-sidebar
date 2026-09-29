@@ -2444,6 +2444,40 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("Archived child")).toBeNull();
   });
 
+  it("shows bb's jump shortcut hints only while the modifier is held", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        Array.from({ length: 10 }, (_, index) =>
+          thread({ id: `thr_${index}`, title: `Thread ${index}` }),
+        ),
+      );
+      const hints = () =>
+        [...document.querySelectorAll("kbd")].map((hint) => hint.textContent);
+
+      // jsdom reports no Mac platform, so the modifier is Control.
+      fireEvent.keyDown(window, { key: "Control" });
+      act(() => vi.advanceTimersByTime(699));
+      expect(hints()).toEqual([]);
+
+      act(() => vi.advanceTimersByTime(1));
+      expect(hints()).toEqual(
+        Array.from({ length: 9 }, (_, index) => `Ctrl + ${index + 1}`),
+      );
+
+      fireEvent.keyUp(window, { key: "Control" });
+      expect(hints()).toEqual([]);
+
+      // A quick chord never shows them.
+      fireEvent.keyDown(window, { key: "Control" });
+      fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+      act(() => vi.advanceTimersByTime(1_000));
+      expect(hints()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("opens a thread normally when the platform modifier is held", () => {
     const rendered = render([thread({ id: "thr_modifier" })]);
     fireEvent.click(screen.getByRole("link"), { metaKey: true });

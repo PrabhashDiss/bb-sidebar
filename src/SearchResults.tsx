@@ -15,6 +15,7 @@ import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
 import { ThreadTitle } from "./ThreadTitle";
 import { OpenPortsIndicator } from "./OpenPorts";
+import { JumpHint, useJumpHint } from "./JumpHints";
 
 /**
  * Search is a separate flat mode. A parked match must not disappear behind
@@ -142,6 +143,7 @@ function SearchResultRow({
 }) {
   const actions = useSidebarThreadActions();
   const { splitProps, layout } = useSidebarThreadSplit(thread.id);
+  const jumpHint = useJumpHint(thread.id);
   const title = threadDisplayTitle(thread);
 
   return (
@@ -205,12 +207,18 @@ function SearchResultRow({
             isWoke && "col-start-2 row-span-2 row-start-1 w-auto gap-1",
           )}
         >
-          {isWoke ? (
-            <span className="shrink-0 text-2xs font-medium text-[color:var(--bb-sidebar-woke)]">
-              Woke
-            </span>
-          ) : null}
-          <StatusOrTime thread={thread} now={now} />
+          {jumpHint ? (
+            <JumpHint label={jumpHint} />
+          ) : (
+            <>
+              {isWoke ? (
+                <span className="shrink-0 text-2xs font-medium text-[color:var(--bb-sidebar-woke)]">
+                  Woke
+                </span>
+              ) : null}
+              <StatusOrTime thread={thread} now={now} />
+            </>
+          )}
         </span>
       </a>
     </li>

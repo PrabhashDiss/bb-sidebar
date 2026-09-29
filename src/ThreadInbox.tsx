@@ -42,6 +42,7 @@ import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { WorkingSinceContext, useWorkingSince } from "./useWorkingSince";
+import { JumpHintsContext, useJumpHints } from "./JumpHints";
 import { useSidebarSettings } from "./useSidebarSettings";
 import { OpenPortsProvider } from "./OpenPorts";
 import {
@@ -407,6 +408,8 @@ export function ThreadInbox({
   const attachShelvesAutoAnimateRef = useListAutoAnimate<HTMLDivElement>();
   const activeThreadIdRef = useRef(activeThreadId);
   activeThreadIdRef.current = activeThreadId;
+  const jumpHintsRootRef = useRef<HTMLDivElement>(null);
+  const jumpHints = useJumpHints(jumpHintsRootRef);
   const configuredSnoozePresets =
     sidebarSettings?.snoozePresets ??
     (typeof legacySettings?.snoozePresets === "string"
@@ -1153,7 +1156,8 @@ export function ThreadInbox({
     <WorkingSinceContext.Provider value={workingSince}>
     <ChildThreadDisplayContext.Provider value={childDisplay}>
     <OpenPortsProvider>
-      <div className="flex min-h-0 flex-1 flex-col">
+    <JumpHintsContext.Provider value={jumpHints}>
+      <div ref={jumpHintsRootRef} className="flex min-h-0 flex-1 flex-col">
         {/* The one control the host has no equivalent for. Everything else in
             the chrome above — New thread, search — is bb's and stays bb's. */}
         <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
@@ -1382,6 +1386,7 @@ export function ThreadInbox({
           )}
         </div>
       </div>
+    </JumpHintsContext.Provider>
     </OpenPortsProvider>
     </ChildThreadDisplayContext.Provider>
     </WorkingSinceContext.Provider>
