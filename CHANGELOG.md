@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## [0.2.26] - 2026-09-29
+
+### Added
+
+- Holding Cmd (Ctrl off Mac) labels the first nine rows with bb's own shortcut hints, ⌘ 1 to ⌘ 9, in place of their status. They appear on the same hold delay as bb's hints and match the row each Cmd+digit shortcut opens.
+- Each process in a hover card's **Workspace ports** list has a stop button. The first click arms it; a second click within four seconds stops the process.
+
+### Changed
+
+- The **Workspace ports** list in a hover card starts collapsed. Click its header to show the ports.
+
 ## [0.2.25] - 2026-09-28
 
 ### Changed
