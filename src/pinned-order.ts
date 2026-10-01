@@ -133,3 +133,57 @@ export function rebaseMovedId(
   return [...currentIds];
 }
 
+
+/** A run of rows that moves as one: a lone thread, or a project's threads. */
+export interface OrderUnit {
+  key: string;
+  ids: readonly string[];
+}
+
+/**
+ * Re-apply a finished move of a whole unit to the full order as it stands now.
+ *
+ * The move is replayed on the live units with {@link rebaseMovedId}, so it
+ * lands relative to the nearest unit that outlived the gesture. The units'
+ * rows then take back exactly the slots those rows held in the full order,
+ * which leaves rows outside the units (other projects' threads under a scope
+ * filter) where they were, and packs each unit's rows together.
+ */
+export function rebaseMovedUnit(
+  currentIds: readonly string[],
+  liveUnits: readonly OrderUnit[],
+  previewKeys: readonly string[],
+  movingKey: string,
+): string[] {
+  const movedKeys = rebaseMovedId(
+    liveUnits.map((unit) => unit.key),
+    previewKeys,
+    movingKey,
+  );
+  const idsByKey = new Map(liveUnits.map((unit) => [unit.key, unit.ids]));
+  const present = new Set(currentIds);
+  const expanded = movedKeys
+    .flatMap((key) => idsByKey.get(key) ?? [])
+    .filter((id) => present.has(id));
+  const slots = new Set(expanded);
+  let next = 0;
+  return currentIds.map((id) => (slots.has(id) ? expanded[next++]! : id));
+}
+
+/**
+ * Put the listed rows in the listed order, each taking a slot one of them
+ * already held, so every other row keeps its place. A preview of part of a
+ * list must not push the rest of it aside.
+ */
+export function orderSubsetInPlace<T extends { readonly id: string }>(
+  threads: readonly T[],
+  orderedIds: readonly string[],
+): T[] {
+  const byId = new Map(threads.map((thread) => [thread.id, thread]));
+  const subset = [...new Set(orderedIds)].filter((id) => byId.has(id));
+  const slots = new Set(subset);
+  let next = 0;
+  return threads.map((thread) =>
+    slots.has(thread.id) ? byId.get(subset[next++]!)! : thread,
+  );
+}

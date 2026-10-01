@@ -6,6 +6,8 @@ import {
   orderInboxThreads,
   orderPinnedThreads,
   pinnedNeighbors,
+  orderSubsetInPlace,
+  rebaseMovedUnit,
 } from "./pinned-order";
 
 describe("pinned ordering", () => {
@@ -87,5 +89,45 @@ describe("pinned ordering", () => {
 
   it("leaves the order alone when the moved row is gone", () => {
     expect(rebaseMovedId(["b", "c"], ["b", "a", "c"], "a")).toEqual(["b", "c"]);
+  });
+});
+
+describe("moving whole units", () => {
+  const units = [
+    { key: "project:web", ids: ["w1", "w2"] },
+    { key: "x", ids: ["x"] },
+    { key: "y", ids: ["y"] },
+  ];
+
+  it("packs a moved unit together and leaves rows outside the units alone", () => {
+    expect(
+      rebaseMovedUnit(
+        ["w1", "other", "x", "w2", "y"],
+        units,
+        ["x", "y", "project:web"],
+        "project:web",
+      ),
+    ).toEqual(["x", "other", "y", "w1", "w2"]);
+  });
+
+  it("lands next to the nearest unit that outlived the gesture", () => {
+    expect(
+      rebaseMovedUnit(
+        ["w1", "w2", "y"],
+        [units[0]!, units[2]!],
+        ["x", "project:web", "y"],
+        "project:web",
+      ),
+    ).toEqual(["w1", "w2", "y"]);
+  });
+
+  it("previews part of a list without moving the rest", () => {
+    const rows = ["a", "b", "c", "d"].map((id) => ({ id }));
+    expect(orderSubsetInPlace(rows, ["d", "b"]).map((row) => row.id)).toEqual([
+      "a",
+      "d",
+      "c",
+      "b",
+    ]);
   });
 });

@@ -36,8 +36,8 @@ import "./settle-button.css";
 export interface ThreadReorderControls {
   disabled: boolean;
   isDragging: boolean;
-  onPointerDown: PointerEventHandler<HTMLAnchorElement>;
-  onKeyDown: KeyboardEventHandler<HTMLAnchorElement>;
+  onPointerDown: PointerEventHandler<HTMLElement>;
+  onKeyDown: KeyboardEventHandler<HTMLElement>;
 }
 
 /**

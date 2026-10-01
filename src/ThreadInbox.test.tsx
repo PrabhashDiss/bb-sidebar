@@ -1195,15 +1195,17 @@ describe("ThreadInbox", () => {
       { key: "Enter" },
     );
     fireEvent.click(screen.getByRole("option", { name: "Project" }));
+    // Projects sit where their first thread is in manual order.
     expect(
       within(activeShelf)
         .getAllByRole("listitem")
+        .filter((row) => !row.hasAttribute("data-reorder-unit"))
         .map((row) => row.textContent),
     ).toEqual([
-      expect.stringContaining("Alpha new"),
-      expect.stringContaining("Alpha old"),
       expect.stringContaining("Beta new"),
       expect.stringContaining("Beta old"),
+      expect.stringContaining("Alpha new"),
+      expect.stringContaining("Alpha old"),
     ]);
     expect(
       within(activeShelf).getByRole("list", {
@@ -1269,14 +1271,18 @@ describe("ThreadInbox", () => {
     expect(headers.map((header) => header.getAttribute("aria-label"))).toEqual([
       "Web (2)",
     ]);
-    // One-thread projects stay ordinary cards, in manual order, above groups.
+    // One-thread projects stay ordinary cards. Everything keeps manual
+    // order, with a project drawn where its first thread is.
     expect(
-      screen.getAllByRole("listitem").map((row) => row.textContent),
+      screen
+        .getAllByRole("listitem")
+        .filter((row) => !row.hasAttribute("data-reorder-unit"))
+        .map((row) => row.textContent),
     ).toEqual([
+      expect.not.stringContaining("Web"),
+      expect.not.stringContaining("Web"),
       expect.stringMatching(/^Zed.*Loose Z/),
       expect.stringMatching(/^Api.*Loose A/),
-      expect.not.stringContaining("Web"),
-      expect.not.stringContaining("Web"),
     ]);
   });
 
@@ -2957,6 +2963,83 @@ describe("ThreadInbox", () => {
     expect(
       rendered.sidebarActionCalls.filter((call) => call.method === "open"),
     ).toHaveLength(openedBeforeClick);
+  });
+
+  describe("moving projects as a whole", () => {
+    function renderProjects(onReorder: (ids: string[]) => void) {
+      window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+      const storedIds = ["w1", "x", "w2", "y"];
+      return renderSlot(inbox, listProps, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "w1", projectId: "web", title: "Web one" }),
+            thread({ id: "x", projectId: "api", title: "Loose X" }),
+            thread({ id: "w2", projectId: "web", title: "Web two" }),
+            thread({ id: "y", projectId: "zed", title: "Loose Y" }),
+          ],
+          projects: [
+            { id: "web", name: "Web", isPersonal: false },
+            { id: "api", name: "Api", isPersonal: false },
+            { id: "zed", name: "Zed", isPersonal: false },
+          ],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          listInboxOrder: () => ({ inboxThreadIds: storedIds }),
+          reorderInbox: (input) => {
+            const parsed = input as { inboxThreadIds: string[] };
+            onReorder(parsed.inboxThreadIds);
+            return { inboxThreadIds: parsed.inboxThreadIds };
+          },
+        },
+      });
+    }
+
+    it("drags a project header past a lone thread, taking its threads along", async () => {
+      let saved: string[] | null = null;
+      renderProjects((ids) => (saved = ids));
+      const header = await screen.findByRole("button", { name: "Web (2)" });
+      const target = screen.getByText("Loose Y").closest("li")!;
+      vi.mocked(document.elementFromPoint).mockReturnValue(target);
+      vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+        top: 0, bottom: 40, left: 0, right: 200, width: 200, height: 40, x: 0, y: 0,
+        toJSON: () => ({}),
+      });
+
+      fireEvent.pointerDown(header, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 30, pointerId: 1 });
+      fireEvent.pointerUp(window, { clientX: 20, clientY: 30, pointerId: 1 });
+
+      await waitFor(() => expect(saved).toEqual(["x", "y", "w1", "w2"]));
+      // The drag must not also toggle the project it started on.
+      expect(header.getAttribute("aria-expanded")).toBe("true");
+    });
+
+    it("moves a lone thread over a whole project from the keyboard", async () => {
+      let saved: string[] | null = null;
+      renderProjects((ids) => (saved = ids));
+      const card = await screen.findByRole("link", { name: "Loose X" });
+      fireEvent.keyDown(card, { key: "ArrowUp", altKey: true });
+      await waitFor(() => expect(saved).toEqual(["x", "w1", "w2", "y"]));
+    });
+
+    it("moves a project header from the keyboard", async () => {
+      let saved: string[] | null = null;
+      renderProjects((ids) => (saved = ids));
+      const header = await screen.findByRole("button", { name: "Web (2)" });
+      fireEvent.keyDown(header, { key: "ArrowDown", altKey: true });
+      await waitFor(() => expect(saved).toEqual(["x", "w1", "w2", "y"]));
+    });
+
+    it("reorders inside a project without moving the project", async () => {
+      let saved: string[] | null = null;
+      renderProjects((ids) => (saved = ids));
+      const card = await screen.findByRole("link", { name: "Web two" });
+      fireEvent.keyDown(card, { key: "ArrowUp", altKey: true });
+      // The project's threads swap within the slots they already held.
+      await waitFor(() => expect(saved).toEqual(["w2", "x", "w1", "y"]));
+    });
   });
 
   it("drops against the inbox order the host pushed mid-drag", async () => {
@@ -5038,7 +5121,8 @@ describe("row context menu", () => {
       ["manual", "manual", true],
       ["created", "created", true],
       ["activity", "activity", true],
-      ["project", "project", true],
+      // The first project unit always starts with the first manual thread.
+      ["project", "manual", true],
     ] as const)("leaving a thread in %s order opens %s first with Active collapsed: %s", async (mode, expectedId, collapsed) => {
       localStorage.setItem("bb-sidebar:active-sort:v1", mode);
       const order = ["manual", "current", "created", "activity", "project"];
