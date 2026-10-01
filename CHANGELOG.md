@@ -4,6 +4,8 @@
 
 ### Added
 
+- A project without an icon shows a letter tile: its first letter on a colour picked from its name, so it looks the same on every machine. Common leading words such as `bb-` are skipped, so `bb-sidebar` shows **S**. The tile also shows while an icon is loading, in the hover card in place of the folder glyph, and in the Project icon settings preview.
+
 - A row shows **Send failed** when a queued message could not be sent, and **Queued** when a message is waiting to send on an otherwise quiet thread, such as a scheduled send. bb draws no status for either, so these rows used to look idle. A failed send also counts as failed in a parent's child summary.
 
 ### Changed

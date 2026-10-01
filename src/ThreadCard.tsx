@@ -244,7 +244,7 @@ export function ThreadCard({
             {showProject ? (
               <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
                 {projectName ? (
-                  <ProjectFavicon src={projectIconUrl} className="size-3" />
+                  <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
                 ) : null}
                 <span className="min-w-0 truncate">{projectName ?? " "}</span>
               </span>

@@ -1,5 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "./lib/utils";
+import {
+  projectMonogramColor,
+  projectMonogramLetter,
+} from "./project-monogram";
 
 // Keyed by the icon route URL. A loaded entry holds the attempt URL that
 // succeeded. A failure is retried with backoff instead of blocking the icon
@@ -25,15 +29,47 @@ function recordFailure(src: string, attempt: number): void {
   });
 }
 
+/**
+ * A letter on a stable colour, for a project with no icon (or one still
+ * loading). One letter: two would be about five pixels wide each at row size.
+ * CSS draws the letter from `data-letter`, so like the icon it stands in for
+ * it stays out of the row's text, copy, and find-in-page.
+ */
+export function ProjectMonogram({
+  name,
+  className,
+}: {
+  name: string;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      data-letter={projectMonogramLetter(name)}
+      className={cn(
+        "bb-sidebar-monogram flex size-3.5 shrink-0 items-center justify-center rounded-[3px] text-[8px] font-semibold leading-none",
+        `bb-sidebar-monogram-${projectMonogramColor(name)}`,
+        className,
+      )}
+    />
+  );
+}
+
 export function ProjectFavicon({
   src,
+  name,
   className,
-  fallback = null,
+  fallback,
 }: {
   src: string | null;
+  /** The project's name; without an explicit fallback, draws its letter tile. */
+  name?: string | null;
   className?: string;
   fallback?: ReactNode;
 }) {
+  if (fallback === undefined) {
+    fallback = name ? <ProjectMonogram name={name} className={className} /> : null;
+  }
   const [, setRenderCount] = useState(0);
   const rerender = () => setRenderCount((count) => count + 1);
   const failure = src ? failedSources.get(src) : undefined;

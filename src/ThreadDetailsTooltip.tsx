@@ -80,7 +80,7 @@ export function ThreadDetailsTooltip({
           <div className="flex items-center gap-2">
             <ProjectFavicon
               src={projectIconUrl(project.id, iconRevision)}
-              fallback={<Icon name="FolderGit" className="size-3.5 shrink-0" aria-hidden />}
+              name={project.name}
             />
             <span className="truncate"><span className="sr-only">Project: </span>{project.name}</span>
           </div>

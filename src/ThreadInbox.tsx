@@ -1852,7 +1852,7 @@ function ActiveProjectGroup({
             !reorder.disabled && "cursor-grab active:cursor-grabbing",
           )}
         >
-          <ProjectFavicon src={projectIconUrl} className="size-3" />
+          <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
           <span className="min-w-0 truncate text-2xs font-medium text-muted-foreground">
             {projectName}
           </span>

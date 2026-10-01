@@ -7,6 +7,7 @@ import {
   PROJECT_ICON_EXTENSIONS,
   projectIconUrl,
 } from "./project-icons";
+import { ProjectMonogram } from "./ProjectFavicon";
 
 interface ProjectIconSetting {
   id: string;
@@ -224,9 +225,12 @@ export function ProjectIconSettings() {
                   className="h-full w-full object-contain p-1.5"
                   onError={() => setPreviewFailed(true)}
                 />
-              ) : (
-                selectedProject?.name.slice(0, 1).toUpperCase()
-              )}
+              ) : selectedProject ? (
+                <ProjectMonogram
+                  name={selectedProject.name}
+                  className="size-full rounded-none text-xl"
+                />
+              ) : null}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">

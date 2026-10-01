@@ -197,7 +197,7 @@ function SearchResultRow({
                   "max-w-[30%] shrink-0",
             )}
           >
-            <ProjectFavicon src={projectIconUrl} className="size-3" />
+            <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
             <span className="min-w-0 truncate">{projectName}</span>
           </span>
         ) : null}
