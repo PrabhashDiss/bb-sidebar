@@ -1,3 +1,5 @@
+import { hasLiveWork } from "./lifecycle";
+
 export const DEFAULT_AUTO_SETTLE_AFTER_DAYS = 3;
 export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
 export const MAX_AUTO_SETTLE_AFTER_DAYS = 90;
@@ -12,10 +14,20 @@ export interface AutoSettleLifecycleState {
   snoozedUntil: number | null;
 }
 
+/** The fields of a bb project-thread row that the policy reads. */
 export interface AutoSettleThread {
+  activity: {
+    activeBackgroundAgentCount: number;
+    activeBackgroundCommandCount: number;
+    activeGoalCount: number;
+    activePlanModeCount: number;
+    activeWorkflowCount: number;
+  };
   createdAt: number;
+  hasPendingInteraction: boolean;
   latestAttentionAt: number;
   pinnedAt: number | null;
+  queuedWork: "failed" | "none" | "waiting";
   status: "active" | "error" | "idle" | "pending" | "starting" | "stopping";
   updatedAt: number;
 }
@@ -36,16 +48,36 @@ export interface AutoSettleSettings {
 
 export type AutoSettleDecision = "keep" | "settle" | "unsettle";
 
+/** The same live work that blocks a manual settle in the sidebar. */
+function isWorking(thread: AutoSettleThread): boolean {
+  const { activity, status } = thread;
+  return hasLiveWork(
+    {
+      workflows: activity.activeWorkflowCount,
+      backgroundAgents: activity.activeBackgroundAgentCount,
+      backgroundCommands: activity.activeBackgroundCommandCount,
+      planMode: activity.activePlanModeCount,
+      goals: activity.activeGoalCount,
+    },
+    status === "active" ||
+      status === "pending" ||
+      status === "starting" ||
+      status === "stopping",
+  );
+}
+
+// Settling also stops the thread's runtime, so anything still running or
+// waiting on the user must keep it out of policy reach. A failed queued
+// message counts too: the user has not seen it go nowhere yet.
 function cannotAutoSettle(
   lifecycle: AutoSettleLifecycleState | null,
   thread: AutoSettleThread,
 ): boolean {
   return (
     thread.pinnedAt !== null ||
-    thread.status === "active" ||
-    thread.status === "pending" ||
-    thread.status === "starting" ||
-    thread.status === "stopping" ||
+    thread.hasPendingInteraction ||
+    thread.queuedWork !== "none" ||
+    isWorking(thread) ||
     lifecycle?.parkedAt != null ||
     lifecycle?.snoozedUntil != null
   );

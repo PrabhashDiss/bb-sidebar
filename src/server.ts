@@ -964,20 +964,25 @@ export default async function plugin(bb: BbPluginApi) {
     inboxThreadIds.forEach((threadId, index) => insert.run(threadId, index));
   });
 
+  // Project rows, not plain thread rows: only they carry every kind of live
+  // work the sidebar checks (workflows, background commands, plan mode, goals,
+  // a pending interaction, queued messages). One unpaged request covers the
+  // same unarchived, visible threads the old paged thread list did.
   const loadPolicyThreads = async () => {
-    const threads: Awaited<ReturnType<typeof bb.sdk.threads.list>> = [];
-    const pageSize = 500;
-    for (let offset = 0; ; offset += pageSize) {
-      const page = await bb.sdk.threads.list({
-        archived: false,
-        includeHidden: false,
-        limit: pageSize,
-        offset,
-      });
-      threads.push(...page);
-      if (page.length < pageSize) break;
-    }
-    return threads;
+    const projects = await bb.sdk.projects.list({
+      include: "threads",
+      includePersonal: true,
+    });
+    return projects.flatMap((project) =>
+      "threads" in project
+        ? project.threads.filter(
+            (thread) =>
+              thread.archivedAt === null &&
+              thread.deletedAt === null &&
+              thread.visibility === "visible",
+          )
+        : [],
+    );
   };
 
   const loadPullRequests = async (environmentIds: readonly string[]) => {

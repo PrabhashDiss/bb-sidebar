@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Automatic settle no longer settles, or stops the runtime of, a thread that is still waiting on you or has live work: a question or approval, queued messages, a workflow, a background agent or command, plan mode, or a goal. It now uses the same rule as the sidebar's **Settle** action.
+- **Regenerate title** works again on current bb, which no longer exposes the inference model it read. It now generates the title with the thread's own agent and model, at low reasoning.
+
 ## [0.2.26] - 2026-09-29
 
 ### Added

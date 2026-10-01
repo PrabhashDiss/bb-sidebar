@@ -1,4 +1,7 @@
-import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import type {
+  PluginSidebarThread,
+  PluginSidebarThreadActivity,
+} from "@get-bb/plugin-sdk";
 
 /**
  * The parked / settled / snoozed lifecycle, as pure functions over stored rows.
@@ -71,18 +74,32 @@ export function canPark(signals: ThreadActivitySignals): boolean {
   return !signals.hasPendingInteraction && !signals.isWorking;
 }
 
-/** Any live work at all, which blocks parking and wakes a parked thread. */
-export function isThreadWorking(thread: PluginSidebarThread): boolean {
-  const { activity } = thread;
+/**
+ * Any live work at all: a turn in flight or any of bb's activity counters.
+ *
+ * The one definition the sidebar and automatic settle share. They read it from
+ * different bb views, so each passes its own turn signal, but the counters
+ * that make a thread busy must never differ between them.
+ */
+export function hasLiveWork(
+  activity: PluginSidebarThreadActivity,
+  turnInFlight: boolean,
+): boolean {
   return (
+    turnInFlight ||
     activity.workflows > 0 ||
     activity.backgroundAgents > 0 ||
     activity.backgroundCommands > 0 ||
     activity.planMode > 0 ||
-    activity.goals > 0 ||
-    thread.indicator === "runtime" ||
-    thread.indicator === "working-draft"
+    activity.goals > 0
   );
+}
+
+/** Any live work at all, which blocks parking and wakes a parked thread. */
+export function isThreadWorking(thread: PluginSidebarThread): boolean {
+  // The sidebar view never reports "working-draft": a draft is per-client
+  // state, so a drafting thread reports what it would without one.
+  return hasLiveWork(thread.activity, thread.indicator === "runtime");
 }
 
 /** Whether a sidebar thread is idle enough for archive and parking actions. */

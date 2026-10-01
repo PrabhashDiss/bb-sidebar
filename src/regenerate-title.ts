@@ -126,73 +126,48 @@ export function createTitleRegenerator(bb: BbPluginApi) {
       throw new Error(
         "This thread has no user-message text to generate a title from",
       );
-    const config = await bb.sdk.system.config();
+    // bb's AI-services setting picks plugin services, not agent models, and a
+    // plugin cannot prompt those. Generate with the model this thread runs.
+    const options = await bb.sdk.threads.defaultExecutionOptions({ threadId });
+    if (!options)
+      throw new Error("This thread has no agent model to generate a title with");
+    const { providerId } = original;
     const providers = await bb.sdk.providers.list();
+    if (!providers.some((provider) => provider.id === providerId && provider.available))
+      throw new Error(`Title regeneration needs the ${providerId} provider to be available`);
     const personalProject = (await bb.sdk.projects.list({ includePersonal: true }))
       .find((project) => project.kind === "personal");
     if (!personalProject) throw new Error("No personal project is available for title generation");
-    const models = [
-      ...new Set([
-        config.aiServices.inference,
-        config.aiServices.inferenceFallback,
-      ]),
-    ];
+    controller.signal.throwIfAborted();
     let title: string | undefined;
-    for (const configured of models) {
+    let helperId: string | undefined;
+    try {
+      const helper = await bb.sdk.threads.spawn({
+        projectId: personalProject.id,
+        environment: { type: "host", workspace: { type: "personal" } },
+        providerId,
+        model: options.model,
+        reasoningLevel: "low",
+        permissionMode: "accept-edits",
+        visibility: "hidden",
+        title: "Generate sidebar title",
+        // No parent/source thread: no inherited conversation or completion
+        // message injected into the user's thread.
+        prompt: titlePrompt(messages),
+      });
+      helperId = helper.id;
+      helpers.add(helperId);
       controller.signal.throwIfAborted();
-      const slash = configured.indexOf("/");
-      const providerId = configured.slice(0, slash);
-      const model = configured.slice(slash + 1);
-      if (
-        slash < 1 ||
-        !model ||
-        !providers.some(
-          (provider) => provider.id === providerId && provider.available,
-        )
-      ) {
-        throw new Error(
-          `Title regeneration needs an installed agent provider for ${configured}`,
-        );
-      }
-      let helperId: string | undefined;
-      try {
-        const helper = await bb.sdk.threads.spawn({
-          projectId: personalProject.id,
-          environment: { type: "host", workspace: { type: "personal" } },
-          providerId,
-          model,
-          reasoningLevel: "low",
-          permissionMode: "accept-edits",
-          visibility: "hidden",
-          title: "Generate sidebar title",
-          // No parent/source thread: no inherited conversation or completion
-          // message injected into the user's thread.
-          prompt: titlePrompt(messages),
-        });
-        helperId = helper.id;
-        helpers.add(helperId);
-        controller.signal.throwIfAborted();
-        await bb.sdk.threads.wait({
-          threadId: helperId,
-          status: "idle",
-          timeoutMs: 45_000,
-          signal: controller.signal,
-        });
-        const result = await bb.sdk.threads.output({ threadId: helperId });
-        title = parseTitle(result.output);
-        break;
-      } catch (error) {
-        if (
-          controller.signal.aborted ||
-          configured === models.at(-1) ||
-          !/timeout|timed out|rate.?limit|429|503|unavailable/iu.test(
-            error instanceof Error ? error.message : String(error),
-          )
-        )
-          throw error;
-      } finally {
-        if (helperId) await cleanup(helperId);
-      }
+      await bb.sdk.threads.wait({
+        threadId: helperId,
+        status: "idle",
+        timeoutMs: 45_000,
+        signal: controller.signal,
+      });
+      const result = await bb.sdk.threads.output({ threadId: helperId });
+      title = parseTitle(result.output);
+    } finally {
+      if (helperId) await cleanup(helperId);
     }
     if (!title) throw new Error("Could not generate a title");
     controller.signal.throwIfAborted();

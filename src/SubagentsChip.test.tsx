@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import { idleSidebarThreadFields } from "./test-fixtures";
 import type { SidebarProvider } from "./ProviderGlyph";
 
 const app = await loadPluginApp(() => import("../app"));
@@ -14,6 +15,7 @@ function thread(
   overrides: Partial<PluginSidebarThread> = {},
 ): PluginSidebarThread {
   return {
+    ...idleSidebarThreadFields,
     id: "thr_1",
     projectId: "proj_1",
     title: "A thread",
@@ -52,6 +54,7 @@ function provider(id: string, displayName: string): SidebarProvider {
     pluginId: `provider-${id}`,
     displayName,
     available: true,
+    completedTurnDisplay: "collapse",
     maintenance: { health: true, usage: false, installation: true },
     logoUrl: `/api/v1/system/providers/${id}/logo`,
     capabilities: {
@@ -123,7 +126,7 @@ describe("SubagentsChip", () => {
         sidebarThreads: {
           status: "ready",
           threads: [thread({ id: "child", title: "Child", parentThreadId: "parent" })],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           getThreadExecutionDetails: (input) => {
@@ -160,7 +163,7 @@ describe("SubagentsChip", () => {
             thread({ id: "child", title: "Child", parentThreadId: "parent" }),
             thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
       },
     );
@@ -211,7 +214,7 @@ describe("SubagentsChip", () => {
               createdAt: 102,
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
       },
     );
@@ -277,7 +280,7 @@ describe("SubagentsChip", () => {
               createdAt: 104,
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
       },
     );
@@ -321,7 +324,7 @@ describe("SubagentsChip", () => {
               createdAt: 102,
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
       },
     );
@@ -369,7 +372,7 @@ describe("SubagentsChip", () => {
               parentThreadId: "child",
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
       },
     );
@@ -428,7 +431,7 @@ describe("SubagentsChip", () => {
               parentThreadId: "parent",
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
       },
     );
@@ -454,7 +457,7 @@ describe("SubagentsChip", () => {
             thread({ id: "parent", title: "Parent" }),
             thread({ id: "child", title: "Child", parentThreadId: "parent" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
       },
     );
@@ -482,7 +485,7 @@ describe("SubagentsChip", () => {
         sidebarThreads: {
           status: "ready",
           threads: orderedChildren,
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           getSidebarSettings: () => {
@@ -530,7 +533,7 @@ describe("SubagentsChip", () => {
         sidebarThreads: {
           status: "ready",
           threads: orderedChildren,
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { getSidebarSettings: () => remoteSettings },
       },
@@ -575,7 +578,7 @@ describe("SubagentsChip", () => {
               providerId: "claude-code",
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         providers: { status: "ready", providers },
         rpc: {
@@ -616,7 +619,7 @@ describe("SubagentsChip", () => {
                 }),
             ),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         providers: { status: "ready", providers },
         rpc: {

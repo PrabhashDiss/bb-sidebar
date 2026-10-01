@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import { idleSidebarThreadFields } from "./test-fixtures";
 import {
   childNeedsYouCount,
   childThreadsByParent,
@@ -24,6 +25,7 @@ function thread(
   overrides: Partial<PluginSidebarThread> = {},
 ): PluginSidebarThread {
   return {
+    ...idleSidebarThreadFields,
     id: "thr_1",
     projectId: "proj_1",
     title: "A thread",

@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import { idleSidebarThreadFields } from "./test-fixtures";
 import { DEFAULT_SNOOZE_PRESET_CONFIG, formatSnoozeWakeTime } from "./lifecycle";
 import type { SidebarProvider } from "./ProviderGlyph";
 
@@ -62,6 +63,7 @@ function thread(
   overrides: Partial<PluginSidebarThread> = {},
 ): PluginSidebarThread {
   return {
+    ...idleSidebarThreadFields,
     id: "thr_1",
     projectId: "proj_1",
     title: "A thread",
@@ -104,6 +106,7 @@ function provider(
     pluginId: `provider-${id}`,
     displayName,
     available: true,
+    completedTurnDisplay: "collapse",
     maintenance: {
       health: true,
       usage: false,
@@ -190,7 +193,7 @@ it("orders hover card subthreads by the saved child sort", async () => {
         thread({ id: "old", parentThreadId: "parent", title: "Old", createdAt: 10 }),
         thread({ id: "new", parentThreadId: "parent", title: "New", createdAt: 20 }),
       ],
-      projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
     },
     providers: { status: "ready", providers: defaultProviders },
     rpc: {
@@ -222,7 +225,7 @@ it("shows port details in the thread hover card", async () => {
     sidebarThreads: {
       status: "ready",
       threads: [thread({ title: "Port details", host: { id: "host_local", name: "Local" }, environment: {
-        id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other",
+        id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other", path: null, isWorktree: null, providerId: null
       } })],
       projects: [],
     },
@@ -268,7 +271,7 @@ it("shows port details in the thread hover card", async () => {
 it("keeps a long workspace port list accessible even without local links", async () => {
   renderSlot(inbox, listProps, {
     sidebarThreads: { status: "ready", projects: [], threads: [thread({ title: "Many ports", environment: {
-      id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other",
+      id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other", path: null, isWorktree: null, providerId: null
     } })] },
     rpc: {
       listLifecycle: () => ({ rows: [] }), getThreadExecutionDetails: () => null,
@@ -288,7 +291,7 @@ it("stops a workspace port process only after a second press", async () => {
   const getOpenPorts = vi.fn(() => ({ groups }));
   renderSlot(inbox, listProps, {
     sidebarThreads: { status: "ready", projects: [], threads: [thread({ id: "thr_ports", title: "Stoppable", environment: {
-      id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other",
+      id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other", path: null, isWorktree: null, providerId: null
     } })] },
     rpc: { listLifecycle: () => ({ rows: [] }), getThreadExecutionDetails: () => null, getOpenPorts, stopWorkspacePort },
   });
@@ -308,7 +311,7 @@ it("stops a workspace port process only after a second press", async () => {
 });
 
 it("marks only the owning thread without a count and clears its icon when the port closes", async () => {
-  const environment = { id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other" as const };
+  const environment = { id: "env_ports", name: null, branchName: "main", workspaceDisplayKind: "other" as const, path: null, isWorktree: null, providerId: null };
   let groups = [{ environmentId: environment.id, ports: [{ port: 3000, ownerThreadId: "ports_a" }, { port: 8080, ownerThreadId: "" }] }];
   renderSlot(inbox, listProps, {
     sidebarThreads: {
@@ -318,7 +321,7 @@ it("marks only the owning thread without a count and clears its icon when the po
         thread({ id: "ports_b", environment }),
         thread({ id: "no_ports" }),
       ],
-      projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
     },
     rpc: {
       listLifecycle: () => ({ rows: [] }),
@@ -350,7 +353,7 @@ it("marks only the owning thread without a count and clears its icon when the po
 
 function render(
   threads: PluginSidebarThread[],
-  projects = [{ id: "proj_1", name: "bb", isPersonal: false }],
+  projects = [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
 ) {
   return renderSlot(inbox, listProps, {
     sidebarThreads: { status: "ready", threads, projects },
@@ -414,7 +417,7 @@ describe("BB Sidebar registration", () => {
     const removeProject = vi.fn(() => ({ ok: true }));
     const addProjectPath = vi.fn(() => ({ ok: true }));
     const rendered = renderSlot(inbox, listProps, {
-      sidebarThreads: { status: "ready", threads: [thread({ title: "Project card" })], projects: [{ id: "proj_1", name: "bb", isPersonal: false }] },
+      sidebarThreads: { status: "ready", threads: [thread({ title: "Project card" })], projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }] },
       context: { projectId: "proj_other", threadId: "thr_other" },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -786,7 +789,7 @@ describe("thread list loading state", () => {
       sidebarThreads: {
         status,
         threads: status === "ready" ? [thread({ title: "Loaded thread" })] : [],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
     });
@@ -851,7 +854,7 @@ describe("ThreadInbox", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ providerId: "pi", title: "Pi thread" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       providers: {
         status: "ready",
@@ -861,6 +864,7 @@ describe("ThreadInbox", () => {
             pluginId: "provider-pi",
             displayName: "Pi",
             available: true,
+            completedTurnDisplay: "collapse",
             maintenance: {
               health: true,
               usage: false,
@@ -916,7 +920,7 @@ describe("ThreadInbox", () => {
           id: "env_1",
           name: "main",
           branchName: "main",
-          workspaceDisplayKind: "other",
+          workspaceDisplayKind: "other", path: null, isWorktree: null, providerId: null
         },
       }),
     ]);
@@ -962,7 +966,7 @@ describe("ThreadInbox", () => {
           thread({ id: "open", title: "Open active" }),
           thread({ id: "other", title: "Other active" }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
     });
@@ -998,7 +1002,7 @@ describe("ThreadInbox", () => {
             updatedAt: now - 7 * 60 * 60 * 1_000,
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       settings: {
         inactiveThreadsEnabled: true,
@@ -1033,7 +1037,7 @@ describe("ThreadInbox", () => {
             updatedAt: Date.now() - 24 * 60 * 60 * 1_000,
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       settings: {
         inactiveThreadsEnabled: false,
@@ -1067,7 +1071,7 @@ describe("ThreadInbox", () => {
             updatedAt: now - 9 * 60 * 60 * 1_000,
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       settings: {
         inactiveThreadsEnabled: true,
@@ -1121,8 +1125,8 @@ describe("ThreadInbox", () => {
         }),
       ],
       [
-        { id: "proj_alpha", name: "Alpha", isPersonal: false },
-        { id: "proj_beta", name: "Beta", isPersonal: false },
+        { id: "proj_alpha", name: "Alpha", isPersonal: false, href: "", settingsHref: "" },
+        { id: "proj_beta", name: "Beta", isPersonal: false, href: "", settingsHref: "" },
       ],
     );
 
@@ -1261,9 +1265,9 @@ describe("ThreadInbox", () => {
         thread({ id: "api-1", projectId: "api", title: "Loose A" }),
       ],
       [
-        { id: "web", name: "Web", isPersonal: false },
-        { id: "api", name: "Api", isPersonal: false },
-        { id: "zed", name: "Zed", isPersonal: false },
+        { id: "web", name: "Web", isPersonal: false, href: "", settingsHref: "" },
+        { id: "api", name: "Api", isPersonal: false, href: "", settingsHref: "" },
+        { id: "zed", name: "Zed", isPersonal: false, href: "", settingsHref: "" },
       ],
     );
 
@@ -1298,7 +1302,7 @@ describe("ThreadInbox", () => {
             thread({ id: "web-1", projectId: "web", title: "First" }),
             thread({ id: "web-2", projectId: "web", title: "Second" }),
           ],
-          projects: [{ id: "web", name: "Web", isPersonal: false }],
+          projects: [{ id: "web", name: "Web", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -1323,8 +1327,8 @@ describe("ThreadInbox", () => {
         thread({ id: "api-1", projectId: "api", title: "Api thread", createdAt: 1 }),
       ],
       [
-        { id: "api", name: "Api", isPersonal: false },
-        { id: "zed", name: "Zed", isPersonal: false },
+        { id: "api", name: "Api", isPersonal: false, href: "", settingsHref: "" },
+        { id: "zed", name: "Zed", isPersonal: false, href: "", settingsHref: "" },
       ],
     );
 
@@ -1351,8 +1355,8 @@ describe("ThreadInbox", () => {
             thread({ id: "api-1", projectId: "api", title: "Third" }),
           ],
           projects: [
-            { id: "web", name: "Web", isPersonal: false },
-            { id: "api", name: "Api", isPersonal: false },
+            { id: "web", name: "Web", isPersonal: false, href: "", settingsHref: "" },
+            { id: "api", name: "Api", isPersonal: false, href: "", settingsHref: "" },
           ],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
@@ -1406,7 +1410,7 @@ describe("ThreadInbox", () => {
         sidebarThreads: {
           status: "ready",
           threads: [thread({ id: "thr_open" })],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -1431,7 +1435,7 @@ describe("ThreadInbox", () => {
           id: "env_1",
           name: "Worktree",
           branchName: "main",
-          workspaceDisplayKind: "managed-worktree",
+          workspaceDisplayKind: "managed-worktree", path: null, isWorktree: null, providerId: null
         },
       }),
       thread({
@@ -1639,7 +1643,7 @@ describe("ThreadInbox", () => {
             indicator: "runtime",
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         getSidebarSettings: () => ({
@@ -1678,7 +1682,7 @@ describe("ThreadInbox", () => {
             indicator: "runtime",
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       providers: { status: "ready", providers: defaultProviders },
       rpc: {
@@ -1723,7 +1727,7 @@ describe("ThreadInbox", () => {
             indicator: "runtime",
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       providers: { status: "ready", providers: defaultProviders },
       rpc: {
@@ -1762,7 +1766,7 @@ describe("ThreadInbox", () => {
             indicator: "runtime",
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         getSidebarSettings: () => {
@@ -1812,7 +1816,7 @@ describe("ThreadInbox", () => {
               parentThreadId: "child",
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -2160,7 +2164,7 @@ describe("ThreadInbox", () => {
             thread({ id: "parent", title: "Parent" }),
             thread({ id: "child", title: "Child", parentThreadId: "parent" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -2182,7 +2186,7 @@ describe("ThreadInbox", () => {
             thread({ id: "child-a", title: "Child A", parentThreadId: "parent" }),
             thread({ id: "child-b", title: "Child B", parentThreadId: "parent" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -2232,7 +2236,7 @@ describe("ThreadInbox", () => {
               parentThreadId: "child",
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -2266,7 +2270,7 @@ describe("ThreadInbox", () => {
             thread({ id: "parent", title: "Parked parent" }),
             thread({ id: "child", title: "Active child", parentThreadId: "parent" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({
@@ -2306,7 +2310,7 @@ describe("ThreadInbox", () => {
               parentThreadId: "child",
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -2599,7 +2603,7 @@ describe("ThreadInbox", () => {
           thread({ id: "b", title: "Pin B", isPinned: true }),
           thread({ id: "c", title: "Pin C", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -2641,7 +2645,7 @@ describe("ThreadInbox", () => {
           thread({ id: "b", title: "Pin B", isPinned: true }),
           thread({ id: "c", title: "Pin C", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -2706,7 +2710,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Pin A", isPinned: true }),
           thread({ id: "b", title: "Pin B", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -2773,7 +2777,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Pin A", isPinned: true }),
           thread({ id: "b", title: "Pin B", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
     });
@@ -2834,7 +2838,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Pin A", isPinned: true }),
           thread({ id: "b", title: "Pin B", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -2868,7 +2872,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Pin A", isPinned: true }),
           thread({ id: "b", title: "Pin B", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
     });
@@ -2915,7 +2919,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Pin A", isPinned: true }),
           thread({ id: "b", title: "Pin B", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
     });
@@ -2979,9 +2983,9 @@ describe("ThreadInbox", () => {
             thread({ id: "y", projectId: "zed", title: "Loose Y" }),
           ],
           projects: [
-            { id: "web", name: "Web", isPersonal: false },
-            { id: "api", name: "Api", isPersonal: false },
-            { id: "zed", name: "Zed", isPersonal: false },
+            { id: "web", name: "Web", isPersonal: false, href: "", settingsHref: "" },
+            { id: "api", name: "Api", isPersonal: false, href: "", settingsHref: "" },
+            { id: "zed", name: "Zed", isPersonal: false, href: "", settingsHref: "" },
           ],
         },
         rpc: {
@@ -3071,7 +3075,7 @@ describe("ThreadInbox", () => {
             updatedAt: now - 7 * 60 * 60 * 1_000,
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       settings: {
         inactiveThreadsEnabled: true,
@@ -3141,7 +3145,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Pin A", isPinned: true }),
           thread({ id: "b", title: "Pin B", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -3180,7 +3184,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Inbox A", createdAt: 2 }),
           thread({ id: "b", title: "Inbox B", createdAt: 1 }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -3204,7 +3208,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Inbox A", createdAt: 2 }),
           thread({ id: "b", title: "Inbox B", createdAt: 1 }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       };
       const settings = { ...defaultSidebarSettings, inactiveThreadsEnabled: shelf === "Inactive" };
       const first = renderSlot(inbox, listProps, {
@@ -3263,7 +3267,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Inbox A", createdAt: 2 }),
           thread({ id: "b", title: "Inbox B", createdAt: 1 }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -3297,7 +3301,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Inbox A", createdAt: 2 }),
           thread({ id: "b", title: "Inbox B", createdAt: 1 }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -3332,7 +3336,7 @@ describe("ThreadInbox", () => {
           thread({ id: "a", title: "Inbox A", createdAt: 2 }),
           thread({ id: "b", title: "Inbox B", createdAt: 1 }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -3388,7 +3392,7 @@ describe("ThreadInbox", () => {
         sidebarThreads: {
           status: "ready",
           threads: [thread({ id: "to-pin", title: "Pin this thread" })],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({ rows: shelf === "Active" ? [] : [{
@@ -3422,7 +3426,7 @@ describe("ThreadInbox", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "to-pin", title: "Still settled" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [{
@@ -3455,7 +3459,7 @@ describe("ThreadInbox", () => {
           thread({ id: "manual", title: "Pinned manual", isPinned: true }),
           thread({ id: "snoozed", title: "Pinned snooze", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         evaluateAutoSettle: () => ({ changedThreadIds: [] }),
@@ -3512,7 +3516,7 @@ describe("ThreadInbox", () => {
             thread({ id: "a", title: "Sidebar work" }),
             thread({ id: "b", title: "Something else" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -3536,7 +3540,7 @@ describe("ThreadInbox", () => {
               parentThreadId: "parent",
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -3561,7 +3565,7 @@ describe("ThreadInbox", () => {
             thread({ id: "snoozed", title: "Snoozed match" }),
             thread({ id: "settled", title: "Settled match" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({
@@ -3615,7 +3619,7 @@ describe("ThreadInbox", () => {
           status: "ready",
           threads: [thread({ id: "plain", title: "Match plain" })],
           projects: [
-            { id: "proj_1", name: "A very long project name", isPersonal: false },
+            { id: "proj_1", name: "A very long project name", isPersonal: false, href: "", settingsHref: "" },
           ],
         },
       },
@@ -3671,7 +3675,7 @@ describe("ThreadInbox", () => {
         sidebarThreads: {
           status: "ready",
           threads,
-          projects: [{ id: "proj_1", name: "A very long project name", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "A very long project name", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({
@@ -3745,7 +3749,7 @@ describe("ThreadInbox", () => {
               updatedAt: now - 31 * 60_000,
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({
@@ -3820,7 +3824,7 @@ describe("ThreadInbox", () => {
               updatedAt: now,
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({
@@ -3866,7 +3870,7 @@ describe("ThreadInbox", () => {
               updatedAt: now,
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -3892,8 +3896,8 @@ describe("ThreadInbox", () => {
             thread({ id: "b", title: "Second match", projectId: "proj_2" }),
           ],
           projects: [
-            { id: "proj_1", name: "bb", isPersonal: false },
-            { id: "proj_2", name: "other", isPersonal: false },
+            { id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" },
+            { id: "proj_2", name: "other", isPersonal: false, href: "", settingsHref: "" },
           ],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
@@ -3922,8 +3926,8 @@ describe("ThreadInbox", () => {
             thread({ id: "b", title: "Board thread", projectId: "proj_2" }),
           ],
           projects: [
-            { id: "proj_1", name: "bb-sidebar", isPersonal: false },
-            { id: "proj_2", name: "kanban", isPersonal: false },
+            { id: "proj_1", name: "bb-sidebar", isPersonal: false, href: "", settingsHref: "" },
+            { id: "proj_2", name: "kanban", isPersonal: false, href: "", settingsHref: "" },
           ],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
@@ -3991,7 +3995,7 @@ describe("ThreadInbox", () => {
             thread({ id: "newer", title: "Newer thread", createdAt: 2 }),
             thread({ id: "older", title: "Older thread", createdAt: 1 }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -4025,7 +4029,7 @@ describe("ThreadInbox", () => {
         sidebarThreads: {
           status: "ready",
           threads: [thread({ title: "A thread" })],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: { listLifecycle: () => ({ rows: [] }) },
       },
@@ -4054,8 +4058,8 @@ describe("ThreadInbox", () => {
         thread({ id: "b", title: "In other", projectId: "proj_2" }),
       ],
       [
-        { id: "proj_1", name: "bb", isPersonal: false },
-        { id: "proj_2", name: "other", isPersonal: false },
+        { id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" },
+        { id: "proj_2", name: "other", isPersonal: false, href: "", settingsHref: "" },
       ],
     );
     // Radix opens on keyboard too, which jsdom can drive without pointer
@@ -4086,7 +4090,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_done", title: "Finished work" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({
@@ -4134,7 +4138,7 @@ describe("parking threads", () => {
             },
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       // Settled in the store, but still working: it must stay visible.
       rpc: {
@@ -4162,7 +4166,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_park", title: "Quiet" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }), park, resume },
     });
@@ -4226,7 +4230,7 @@ describe("parking threads", () => {
             updatedAt: Date.now() - 2 * 60_000,
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }), snooze, settle },
     });
@@ -4290,7 +4294,7 @@ describe("parking threads", () => {
             updatedAt: minute - 4 * 60_000,
           }),
         ),
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
     });
@@ -4346,7 +4350,7 @@ describe("parking threads", () => {
         threads: [
           thread({ id: "thr_open", title: "Menu open", indicator: "unread-error" }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
     });
@@ -4393,7 +4397,7 @@ describe("parking threads", () => {
             updatedAt: now,
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
     });
@@ -4425,7 +4429,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_park", title: "Quiet" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -4460,7 +4464,7 @@ describe("parking threads", () => {
             updatedAt: now,
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       // Settled in the store, but a raised hand brings it straight back.
       rpc: {
@@ -4506,7 +4510,7 @@ describe("parking threads", () => {
             latestAttentionAt: now - (3 * 3_600_000 + 60_000),
           }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({
@@ -4539,7 +4543,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_available", title: "Still available" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => Promise.reject(new Error("backend reloading")),
@@ -4556,7 +4560,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_snz", title: "Later" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({
@@ -4614,7 +4618,7 @@ describe("parking threads", () => {
           thread({ id: "thr_done", title: "Finished work" }),
           thread({ id: "thr_later", title: "Later work" }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       settings: {
         inactiveThreadsEnabled: true,
@@ -4685,7 +4689,7 @@ describe("parking threads", () => {
         }),
         thread({ id: "settled", title: "Settled work" }),
       ],
-      projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
     };
     renderSlot(inbox, props, {
       sidebarThreads,
@@ -4734,7 +4738,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_open", title: "Open but settled" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({
@@ -4768,7 +4772,7 @@ describe("parking threads", () => {
           thread({ id: "old-settle", title: "Older settle", createdAt: 999 }),
           thread({ id: "new-settle", title: "Newer settle", createdAt: 1 }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({
@@ -4802,7 +4806,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready",
         threads,
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({
@@ -4863,7 +4867,7 @@ describe("parking threads", () => {
       sidebarThreads: {
         status: "ready",
         threads,
-        projects: [{ id: "proj_1", name: "A very long project name", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "A very long project name", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: lifecycleRows }),
@@ -4956,7 +4960,7 @@ describe("parking threads", () => {
               updatedAt: now,
             }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({ rows: lifecycleRows }),
@@ -5064,7 +5068,7 @@ describe("row context menu", () => {
             thread({ id: "thr_settle", title: "Settle from menu" }),
             thread({ id: "open", title: "Stay here" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
@@ -5097,7 +5101,7 @@ describe("row context menu", () => {
               thread({ id: "current", title: "Current", createdAt: 20 }),
               thread({ id: "next", title: "Next", createdAt: 10 }),
             ],
-            projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+            projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
           },
           rpc: {
             listLifecycle: () => ({ rows: [] }),
@@ -5138,8 +5142,8 @@ describe("row context menu", () => {
             thread({ id: "project", title: "Alpha first", projectId: "alpha", createdAt: 5 }),
           ],
           projects: [
-            { id: "proj_1", name: "Zulu", isPersonal: false },
-            { id: "alpha", name: "Alpha", isPersonal: false },
+            { id: "proj_1", name: "Zulu", isPersonal: false, href: "", settingsHref: "" },
+            { id: "alpha", name: "Alpha", isPersonal: false, href: "", settingsHref: "" },
           ],
         },
         rpc: {
@@ -5176,7 +5180,7 @@ describe("row context menu", () => {
             thread({ id: "current", title: "Current", createdAt: 20 }),
             thread({ id: "active", title: "First active", createdAt: 200 }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
@@ -5202,7 +5206,7 @@ describe("row context menu", () => {
             thread({ id: "first", title: "First active", createdAt: 20 }),
             thread({ id: "last", title: "Last active", createdAt: 10 }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
@@ -5232,7 +5236,7 @@ describe("row context menu", () => {
               thread({ id: "snoozed", title: "Snoozed thread" }),
               thread({ id: "settled", title: "Settled thread" }),
             ],
-            projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+            projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
           },
           settings: { inactiveThreadsEnabled: true, inactiveAfterHours: "6" },
           rpc: {
@@ -5268,7 +5272,7 @@ describe("row context menu", () => {
             thread({ id: "second", title: "Second active", createdAt: 20 }),
             thread({ id: "current", title: "Current", createdAt: 10 }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({ rows: firstSettled ? [
@@ -5319,7 +5323,7 @@ describe("row context menu", () => {
             ] : []),
             thread({ id: "inactive", title: "Inactive" }),
           ],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         settings: { inactiveThreadsEnabled: true, inactiveAfterHours: "6" },
         rpc: {
@@ -5352,7 +5356,7 @@ describe("row context menu", () => {
         sidebarThreads: {
           status: "ready",
           threads: [thread({ id: "only", title: "Only thread" })],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
@@ -5392,7 +5396,7 @@ describe("row context menu", () => {
           thread({ id: "slow", title: "Slow settle", createdAt: 20 }),
           thread({ id: "elsewhere", title: "Elsewhere", createdAt: 10 }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -5424,7 +5428,7 @@ describe("row context menu", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "loud", title: "Loud snooze" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -5466,7 +5470,7 @@ describe("row context menu", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "dedupe", title: "Dedupe snooze" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -5521,7 +5525,7 @@ describe("row context menu", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_ports", title: "Port owner" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -5543,7 +5547,7 @@ describe("row context menu", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "round-trip", title: "Round trip" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({ rows: [] }),
@@ -5595,7 +5599,7 @@ describe("row context menu", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "wake", title: "Wake round trip" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({
@@ -5645,7 +5649,7 @@ describe("row context menu", () => {
         sidebarThreads: {
           status: "ready",
           threads: [thread({ id: "broken", title: "Broken settle" })],
-          projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
         rpc: {
           listLifecycle: () => ({ rows: [] }),
@@ -5679,7 +5683,7 @@ describe("row context menu", () => {
           thread({ id: "settled", title: "Settled row" }),
           thread({ id: "snoozed", title: "Snoozed row" }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         listLifecycle: () => ({
@@ -5869,7 +5873,7 @@ describe("row context menu", () => {
           id: "env_1",
           name: "Worktree",
           branchName: "feature/context-menu",
-          workspaceDisplayKind: "managed-worktree",
+          workspaceDisplayKind: "managed-worktree", path: null, isWorktree: null, providerId: null
         },
       }),
     ]);
@@ -5907,7 +5911,7 @@ describe("row context menu", () => {
       value: { writeText },
     });
     render([thread({ id: "thr_personal", title: "Personal thread" })], [
-      { id: "proj_1", name: "Personal", isPersonal: true },
+      { id: "proj_1", name: "Personal", isPersonal: true, href: "", settingsHref: "" },
     ]);
     const copyLink = async () => {
       fireEvent.contextMenu(await screen.findByText("Personal thread"));
@@ -5934,7 +5938,7 @@ describe("row context menu", () => {
           thread({ id: "thr_child", title: "Child", parentThreadId: "thr_del" }),
           thread({ id: "thr_grandchild", title: "Grandchild", parentThreadId: "thr_child" }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       providers: { status: "ready", providers: defaultProviders },
       rpc: { listLifecycle: () => ({ rows: [] }), deleteThread: () => ({ ok: true }) },
@@ -5983,7 +5987,7 @@ describe("row context menu", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_snooze", title: "Snooze me" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       settings: { snoozePresets: "15m, Lunch break=3h" },
       rpc: {
@@ -6095,7 +6099,7 @@ describe("card metadata", () => {
           id: "env_1",
           name: "Worktree",
           branchName: "bb/feature",
-          workspaceDisplayKind: "managed-worktree",
+          workspaceDisplayKind: "managed-worktree", path: null, isWorktree: null, providerId: null
         },
       }),
     ]);
@@ -6115,7 +6119,7 @@ describe("card metadata", () => {
           id: "env_1",
           name: "Checkout",
           branchName: "main",
-          workspaceDisplayKind: "other",
+          workspaceDisplayKind: "other", path: null, isWorktree: null, providerId: null
         },
       }),
     ]);
@@ -6135,6 +6139,9 @@ describe("card metadata", () => {
           id: "env_worktree",
           name: null,
           branchName: "bb/feature",
+          path: null,
+          isWorktree: null,
+          providerId: null,
           workspaceDisplayKind,
         },
       }),
@@ -6183,7 +6190,7 @@ describe("card metadata", () => {
           id: "env_1",
           name: "Feature worktree",
           branchName: "bb/details",
-          workspaceDisplayKind: "unmanaged-worktree",
+          workspaceDisplayKind: "unmanaged-worktree", path: null, isWorktree: null, providerId: null
         },
         activity: {
           workflows: 1,
@@ -6363,7 +6370,7 @@ describe("pull request badge", () => {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_pr" })],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }) },
       sidebarPullRequests: {
@@ -6449,7 +6456,7 @@ it("keeps parked threads parked when opened and offers Resume with Undo", async 
     sidebarThreads: {
       status: "ready",
       threads: [thread({ id: "waiting", title: "Awaiting review", isPinned: true })],
-      projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
     },
     rpc: {
       listLifecycle: () => ({ rows: [{ threadId: "waiting", parkedAt: Date.now() - 5 * 86400000, settledAt: null, snoozedUntil: null, snoozedAt: null }] }),
@@ -6495,7 +6502,7 @@ describe("parent thread menu", () => {
           thread({ id: "descendant", title: "Forbidden pinned child", parentThreadId: "child", isPinned: true }),
           thread({ id: "other", title: "Foreign pinned thread", projectId: "proj_other", isPinned: true }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }, { id: "proj_other", name: "docs", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }, { id: "proj_other", name: "docs", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: {
         getSidebarSettings: () => ({ ...defaultSidebarSettings, inactiveThreadsEnabled: true, inactiveAfterHours: 6 }),
@@ -6545,7 +6552,7 @@ describe("parent thread menu", () => {
           thread({ id: "grandchild", title: "Forbidden grandchild", parentThreadId: "descendant" }),
           thread({ id: "other", title: "Other project", projectId: "proj_other" }),
         ],
-        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
       },
       rpc: { listLifecycle: () => ({ rows: [] }), setThreadParent },
     });

@@ -38,7 +38,11 @@ async function setup() {
   const { bb, harness } = createFakePluginHost({ pluginId: "bb-sidebar" });
   const sdk = harness.inspection.sdk;
   sdk.stub("threads.get", async () =>
-    makeThreadResponse({ id: "target", title: "Original title" }),
+    makeThreadResponse({
+      id: "target",
+      providerId: "codex",
+      title: "Original title",
+    }),
   );
   sdk.stub("threads.timeline", async () =>
     page([
@@ -49,11 +53,12 @@ async function setup() {
       message(5, "Assistant must be excluded", { role: "assistant" }),
     ]),
   );
-  sdk.stub("system.config", async () => ({
-    aiServices: {
-      inference: "codex/primary",
-      inferenceFallback: "codex/fallback",
-    },
+  sdk.stub("threads.defaultExecutionOptions", async () => ({
+    model: "primary",
+    permissionMode: "full",
+    reasoningLevel: "high",
+    serviceTier: "default",
+    source: "client/turn/start",
   }));
   sdk.stub("providers.list", async () => [{ id: "codex", available: true }]);
   sdk.stub("projects.list", async () => [{ id: "personal", kind: "personal" }]);
@@ -94,6 +99,7 @@ describe("title regeneration", () => {
       projectId: "personal",
       providerId: "codex",
       model: "primary",
+      reasoningLevel: "low",
       visibility: "hidden",
       environment: { type: "host", workspace: { type: "personal" } },
     });
@@ -175,22 +181,21 @@ describe("title regeneration", () => {
     expect(sdk.callsTo("threads.delete")).toHaveLength(1);
   });
 
-  it("retries a timeout with the configured fallback and cleans up both attempts", async () => {
+  it("explains when the thread has no model or provider to reuse", async () => {
     const { sdk, run } = await setup();
-    sdk.stub(
-      "threads.wait",
-      vi
-        .fn()
-        .mockRejectedValueOnce(new Error("timed out"))
-        .mockResolvedValueOnce({ matched: true }),
-    );
-    await run();
-    expect(
-      sdk
-        .callsTo("threads.spawn")
-        .map((call) => (call[0] as { model: string }).model),
-    ).toEqual(["primary", "fallback"]);
-    expect(sdk.callsTo("threads.delete")).toHaveLength(2);
+    sdk.stub("threads.defaultExecutionOptions", async () => null);
+    await expect(run()).rejects.toThrow("no agent model");
+    sdk.stub("threads.defaultExecutionOptions", async () => ({
+      model: "primary",
+      permissionMode: "full",
+      reasoningLevel: "high",
+      serviceTier: "default",
+      source: "client/turn/start",
+    }));
+    sdk.stub("providers.list", async () => [{ id: "codex", available: false }]);
+    await expect(run()).rejects.toThrow("codex provider to be available");
+    expect(sdk.callsTo("threads.spawn")).toHaveLength(0);
+    expect(sdk.callsTo("threads.update")).toHaveLength(0);
   });
 
   it("preserves a manual rename made while generating", async () => {
@@ -199,8 +204,8 @@ describe("title regeneration", () => {
       "threads.get",
       vi
         .fn()
-        .mockResolvedValueOnce(makeThreadResponse({ title: "Original title" }))
-        .mockResolvedValueOnce(makeThreadResponse({ title: "Manual title" })),
+        .mockResolvedValueOnce(makeThreadResponse({ providerId: "codex", title: "Original title" }))
+        .mockResolvedValueOnce(makeThreadResponse({ providerId: "codex", title: "Manual title" })),
     );
     await expect(run()).rejects.toThrow("newer title was kept");
     expect(sdk.callsTo("threads.update")).toHaveLength(0);
