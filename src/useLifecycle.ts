@@ -12,6 +12,7 @@ import {
   nextWakeDelayMs,
   resolveShelf,
   resolveWakeReason,
+  sidebarThreadSignals,
   type ThreadLifecycleRow,
   type ThreadShelf,
 } from "./lifecycle";
@@ -237,12 +238,7 @@ export function useLifecycle(
   }, [now, rows]);
 
   return useMemo<LifecycleApi>(() => {
-    const signalsFor = (thread: PluginSidebarThread) => ({
-      hasPendingInteraction: thread.hasPendingInteraction,
-      isWorking: isWorking(thread),
-      isUnread: thread.isUnread,
-      latestAttentionAt: thread.latestAttentionAt,
-    });
+    const signalsFor = sidebarThreadSignals;
     // One mutation per thread at a time. The write publishes on the realtime
     // channel, and that subscription refreshes every client after success.
     const mutate = async (

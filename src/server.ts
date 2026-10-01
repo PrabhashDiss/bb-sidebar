@@ -1138,25 +1138,45 @@ export default async function plugin(bb: BbPluginApi) {
         ),
         onMerge: configured.autoSettleOnMerge,
       };
-      const changes = threads.flatMap((thread) => {
-        // Re-read after PR lookups so a concurrent Park action wins.
-        const row = readOne(thread.id);
-        const decision = decideAutoSettle({
-          lifecycle: row,
-          now,
-          pullRequest:
-            thread.environmentId === null
-              ? { outcome: "absent" }
-              : (pullRequests.get(thread.environmentId) ?? {
-                  outcome: "unknown",
-                }),
-          settings: policySettings,
-          thread,
+      const decide = (keepThreadIds: ReadonlySet<string>) =>
+        threads.flatMap((thread) => {
+          if (keepThreadIds.has(thread.id)) return [];
+          // Re-read after every lookup so a concurrent Park action wins.
+          const row = readOne(thread.id);
+          const decision = decideAutoSettle({
+            lifecycle: row,
+            now,
+            pullRequest:
+              thread.environmentId === null
+                ? { outcome: "absent" }
+                : (pullRequests.get(thread.environmentId) ?? {
+                    outcome: "unknown",
+                  }),
+            settings: policySettings,
+            thread,
+          });
+          return decision === "keep"
+            ? []
+            : [{ decision, row, threadId: thread.id }];
         });
-        return decision === "keep"
-          ? []
-          : [{ decision, row, threadId: thread.id }];
-      });
+      let changes = decide(new Set());
+      // Settling stops the runtime, which kills what its agent left running in
+      // the background, and bb cannot see that work when the provider does not
+      // report it. A thread still serving a port, such as a dev server, stays
+      // out of policy reach until it stops.
+      const settling = new Set(
+        changes.flatMap((change) =>
+          change.decision === "settle" ? [change.threadId] : [],
+        ),
+      );
+      if (settling.size > 0) {
+        changes = decide(
+          await threadPortActions.threadsServingPorts(
+            threads.filter((thread) => settling.has(thread.id)),
+            threads,
+          ),
+        );
+      }
       if (changes.length === 0) return [];
       applyPolicyChanges(changes, now);
       const changedThreadIds = changes.map((change) => change.threadId);

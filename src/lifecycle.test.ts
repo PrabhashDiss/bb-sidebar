@@ -17,6 +17,7 @@ import {
 
 const quiet: ThreadActivitySignals = {
   hasPendingInteraction: false,
+  hasQueuedWork: false,
   isWorking: false,
   isUnread: false,
   latestAttentionAt: 0,
@@ -41,6 +42,10 @@ describe("canPark", () => {
   // than a session status, and parking any of them hides running work.
   it("refuses while any work is running", () => {
     expect(canPark({ ...quiet, isWorking: true })).toBe(false);
+  });
+
+  it("refuses while a message waits to send or failed to send", () => {
+    expect(canPark({ ...quiet, hasQueuedWork: true })).toBe(false);
   });
 
   it("allows a quiet thread", () => {

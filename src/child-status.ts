@@ -48,7 +48,8 @@ export function isWorkingIndicator(
 export function childStatusKind(
   thread: PluginSidebarThread,
 ): ChildStatusKind | null {
-  if (thread.indicator === "unread-error") return "failed";
+  if (thread.indicator === "unread-error" || thread.queuedWork === "failed")
+    return "failed";
   if (thread.hasPendingInteraction || thread.indicator === "waiting-for-input")
     return "needs-you";
   if (thread.indicator === "unread-success") return "done";

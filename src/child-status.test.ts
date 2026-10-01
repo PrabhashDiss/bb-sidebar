@@ -46,6 +46,11 @@ describe("childStatusKind", () => {
         thread({ indicator: "unread-error", hasPendingInteraction: true }),
       ),
     ).toBe("failed");
+    expect(
+      childStatusKind(
+        thread({ queuedWork: "failed", hasPendingInteraction: true }),
+      ),
+    ).toBe("failed");
     expect(childStatusKind(thread({ hasPendingInteraction: true }))).toBe(
       "needs-you",
     );

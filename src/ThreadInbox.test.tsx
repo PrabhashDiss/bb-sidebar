@@ -4159,6 +4159,35 @@ describe("parking threads", () => {
     expect(screen.queryByLabelText("Settle thread")).toBeNull();
   });
 
+  it.each([
+    ["an unread thread whose turn is still running", { status: "active" as const, indicator: "unread-success" as const }],
+    ["a message waiting to send", { queuedWork: "waiting" as const }],
+    ["a message that failed to send", { queuedWork: "failed" as const }],
+  ])("keeps %s out of the shelves and offers no park action", async (_, overrides) => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_busy", title: "Not done", ...overrides })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "thr_busy",
+              settledAt: 200,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+          ],
+        }),
+      },
+    });
+    expect(await screen.findByText("Not done")).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Settled" })).toBeNull();
+    expect(screen.queryByLabelText("Settle thread")).toBeNull();
+  });
+
   it("offers Park thread below the snooze times and allows parking again after Undo", async () => {
     const park = vi.fn(() => ({ ok: true, reclaim: SETTLED_NOTHING }));
     const resume = vi.fn(() => ({ ok: true }));
@@ -6296,7 +6325,41 @@ describe("card metadata", () => {
     expect(await screen.findByText("Needs you")).toBeDefined();
   });
 
+  // bb paints no indicator for queued messages, so without these labels a
+  // failed send reads as idle or merely busy.
+  it("labels a failed send over everything but a question", async () => {
+    render([
+      thread({ id: "thr_failed", indicator: "runtime", queuedWork: "failed" }),
+      thread({
+        id: "thr_asking",
+        hasPendingInteraction: true,
+        queuedWork: "failed",
+      }),
+    ]);
+    expect(await screen.findByText("Send failed")).toBeDefined();
+    expect(screen.getByLabelText("A queued message failed to send")).toBeDefined();
+    expect(screen.getByText("Needs you")).toBeDefined();
+    expect(screen.queryByText("Working")).toBeNull();
+  });
+
+  it("labels a waiting message only on an otherwise quiet row", async () => {
+    render([
+      thread({ id: "thr_scheduled", title: "Scheduled", queuedWork: "waiting" }),
+      thread({
+        id: "thr_behind",
+        title: "Behind a turn",
+        indicator: "runtime",
+        queuedWork: "waiting",
+      }),
+    ]);
+    expect(await screen.findByText("Queued")).toBeDefined();
+    expect(screen.getByLabelText("A message is waiting to send")).toBeDefined();
+    expect(screen.getAllByText("Queued")).toHaveLength(1);
+    expect(screen.getByText("Working")).toBeDefined();
+  });
+
   // An indicator this plugin does not know must fall through to the age label
+  // rather than leave the slot blank.  // An indicator this plugin does not know must fall through to the age label
   // rather than leave the slot blank.
   it("keeps the age label for an unrecognized indicator", async () => {
     render([

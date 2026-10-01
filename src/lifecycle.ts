@@ -28,6 +28,8 @@ export interface ThreadLifecycleRow {
 /** The activity signals that outrank a user's parking decision. */
 export interface ThreadActivitySignals {
   hasPendingInteraction: boolean;
+  /** A message waits to be sent, or one failed to send. */
+  hasQueuedWork: boolean;
   /** Any live work: runtime, workflows, background agents, plan, goals. */
   isWorking: boolean;
   isUnread: boolean;
@@ -63,15 +65,36 @@ export function resolveWakeReason(
 }
 
 /**
- * Whether a thread may be parked at all.
+ * Whether a thread may be parked at all: the one rule manual parking and
+ * automatic settle share.
  *
  * bb has more kinds of live work than a single session status — workflows,
  * background agents, background commands, plan mode, goals — and every one of
  * them must block parking. Hiding a thread that is still working is the one
- * failure this feature cannot afford.
+ * failure this feature cannot afford. A queued message is work about to
+ * start, and a failed one is something the user has not seen go nowhere yet.
  */
-export function canPark(signals: ThreadActivitySignals): boolean {
-  return !signals.hasPendingInteraction && !signals.isWorking;
+export function canPark(
+  signals: Pick<
+    ThreadActivitySignals,
+    "hasPendingInteraction" | "hasQueuedWork" | "isWorking"
+  >,
+): boolean {
+  return (
+    !signals.hasPendingInteraction &&
+    !signals.hasQueuedWork &&
+    !signals.isWorking
+  );
+}
+
+/** A turn bb has accepted and not yet finished, in either thread view. */
+export function isTurnInFlight(status: PluginSidebarThread["status"]): boolean {
+  return (
+    status === "active" ||
+    status === "pending" ||
+    status === "starting" ||
+    status === "stopping"
+  );
 }
 
 /**
@@ -97,19 +120,31 @@ export function hasLiveWork(
 
 /** Any live work at all, which blocks parking and wakes a parked thread. */
 export function isThreadWorking(thread: PluginSidebarThread): boolean {
-  // The sidebar view never reports "working-draft": a draft is per-client
-  // state, so a drafting thread reports what it would without one.
-  return hasLiveWork(thread.activity, thread.indicator === "runtime");
+  // The turn status as well as the indicator: bb paints attention before
+  // work, so an unread thread whose turn is still running shows no runtime
+  // indicator, while a monitor keeps the runtime indicator between turns.
+  return hasLiveWork(
+    thread.activity,
+    isTurnInFlight(thread.status) || thread.indicator === "runtime",
+  );
+}
+
+/** The parking signals for a sidebar thread. */
+export function sidebarThreadSignals(
+  thread: PluginSidebarThread,
+): ThreadActivitySignals {
+  return {
+    hasPendingInteraction: thread.hasPendingInteraction,
+    hasQueuedWork: thread.queuedWork !== "none",
+    isWorking: isThreadWorking(thread),
+    isUnread: thread.isUnread,
+    latestAttentionAt: thread.latestAttentionAt,
+  };
 }
 
 /** Whether a sidebar thread is idle enough for archive and parking actions. */
 export function canParkThread(thread: PluginSidebarThread): boolean {
-  return canPark({
-    hasPendingInteraction: thread.hasPendingInteraction,
-    isWorking: isThreadWorking(thread),
-    isUnread: thread.isUnread,
-    latestAttentionAt: thread.latestAttentionAt,
-  });
+  return canPark(sidebarThreadSignals(thread));
 }
 
 /**

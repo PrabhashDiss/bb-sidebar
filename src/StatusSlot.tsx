@@ -50,7 +50,8 @@ export function StatusOrTime({
     return (
       <span
         aria-label={
-          thread.hasPendingInteraction ? label : (thread.indicatorLabel ?? label)
+          status.ariaLabel ??
+          (thread.hasPendingInteraction ? label : (thread.indicatorLabel ?? label))
         }
         className={cn(
           "max-w-full truncate text-2xs font-medium",
@@ -74,6 +75,8 @@ export interface ShortStatus {
   className: string;
   /** Live work gets a running duration; a verdict or a request does not. */
   showsDuration: boolean;
+  /** For statuses bb has no indicator for, so no accessible label either. */
+  ariaLabel?: string;
 }
 
 export function shortStatus(
@@ -115,13 +118,37 @@ export function shortStatus(
   }
 }
 
-/** A pending user interaction outranks any concurrently reported runtime. */
+/**
+ * A pending user interaction outranks any concurrently reported runtime, and a
+ * message that failed to send outranks the rest: bb paints no indicator for
+ * either queued state, so a row would otherwise look idle or merely busy.
+ * A waiting message only shows on an otherwise quiet row; a running turn
+ * already says more.
+ */
 export function threadShortStatus(
   thread: PluginSidebarThread,
 ): ShortStatus | null {
-  return thread.hasPendingInteraction
-    ? shortStatus("waiting-for-input", null)
-    : shortStatus(thread.indicator, thread.indicatorLabel);
+  if (thread.hasPendingInteraction) {
+    return shortStatus("waiting-for-input", null);
+  }
+  if (thread.queuedWork === "failed") {
+    return {
+      label: "Send failed",
+      className: statusToneClass("unread-error"),
+      showsDuration: false,
+      ariaLabel: "A queued message failed to send",
+    };
+  }
+  const status = shortStatus(thread.indicator, thread.indicatorLabel);
+  if (status === null && thread.queuedWork === "waiting") {
+    return {
+      label: "Queued",
+      className: statusToneClass("draft"),
+      showsDuration: false,
+      ariaLabel: "A message is waiting to send",
+    };
+  }
+  return status;
 }
 
 export function shortStatusLabel(

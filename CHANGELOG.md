@@ -2,7 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- A row shows **Send failed** when a queued message could not be sent, and **Queued** when a message is waiting to send on an otherwise quiet thread, such as a scheduled send. bb draws no status for either, so these rows used to look idle. A failed send also counts as failed in a parent's child summary.
+
+### Changed
+
+- Requires plugin SDK 0.6.5 or newer.
+
 ### Fixed
+
+- **Settle**, **Park**, and **Snooze** are no longer offered for a thread with a queued or failed message, or for an unread thread whose turn is still running. Settled, parked, and snoozed threads in either state return to Active.
+- Automatic settle no longer settles a thread that is still serving a port from its workspace, such as a dev server. Settling stops the thread's runtime, which also stops processes its agent left running, and some providers do not tell bb about them. A thread whose machine cannot be checked is left alone until the next pass.
 
 - Automatic settle no longer settles, or stops the runtime of, a thread that is still waiting on you or has live work: a question or approval, queued messages, a workflow, a background agent or command, plan mode, or a goal. It now uses the same rule as the sidebar's **Settle** action.
 - **Regenerate title** works again on current bb, which no longer exposes the inference model it read. It now generates the title with the thread's own agent and model, at low reasoning.

@@ -1,4 +1,4 @@
-import { hasLiveWork } from "./lifecycle";
+import { canPark, hasLiveWork, isTurnInFlight } from "./lifecycle";
 
 export const DEFAULT_AUTO_SETTLE_AFTER_DAYS = 3;
 export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
@@ -50,7 +50,7 @@ export type AutoSettleDecision = "keep" | "settle" | "unsettle";
 
 /** The same live work that blocks a manual settle in the sidebar. */
 function isWorking(thread: AutoSettleThread): boolean {
-  const { activity, status } = thread;
+  const { activity } = thread;
   return hasLiveWork(
     {
       workflows: activity.activeWorkflowCount,
@@ -59,25 +59,23 @@ function isWorking(thread: AutoSettleThread): boolean {
       planMode: activity.activePlanModeCount,
       goals: activity.activeGoalCount,
     },
-    status === "active" ||
-      status === "pending" ||
-      status === "starting" ||
-      status === "stopping",
+    isTurnInFlight(thread.status),
   );
 }
 
-// Settling also stops the thread's runtime, so anything still running or
-// waiting on the user must keep it out of policy reach. A failed queued
-// message counts too: the user has not seen it go nowhere yet.
+// Settling also stops the thread's runtime, so anything the sidebar would
+// refuse to park must keep it out of policy reach too.
 function cannotAutoSettle(
   lifecycle: AutoSettleLifecycleState | null,
   thread: AutoSettleThread,
 ): boolean {
   return (
     thread.pinnedAt !== null ||
-    thread.hasPendingInteraction ||
-    thread.queuedWork !== "none" ||
-    isWorking(thread) ||
+    !canPark({
+      hasPendingInteraction: thread.hasPendingInteraction,
+      hasQueuedWork: thread.queuedWork !== "none",
+      isWorking: isWorking(thread),
+    }) ||
     lifecycle?.parkedAt != null ||
     lifecycle?.snoozedUntil != null
   );
