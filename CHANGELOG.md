@@ -2,22 +2,25 @@
 
 ## Unreleased
 
+## [0.2.27] - 2026-10-01
+
 ### Added
 
 - A project without an icon shows a letter tile: its first letter on a colour picked from its name, so it looks the same on every machine. Common leading words such as `bb-` are skipped, so `bb-sidebar` shows **S**. The tile also shows while an icon is loading, in the hover card in place of the folder glyph, and in the Project icon settings preview.
-
-- A row shows **Send failed** when a queued message could not be sent, and **Queued** when a message is waiting to send on an otherwise quiet thread, such as a scheduled send. bb draws no status for either, so these rows used to look idle. A failed send also counts as failed in a parent's child summary.
+- A row shows **Send failed** when a queued message could not be sent, and **Queued** when a message is waiting to send on an otherwise quiet thread, such as a scheduled send. These rows used to show only their age. A failed send also counts as failed in a parent's child summary.
 
 ### Changed
 
+- Sorting Active by project gives a header only to projects with two or more Active threads. A project with one Active thread stays an ordinary card, so a list without repeated projects reads like manual order.
+- Project groups and single cards follow your manual order, with each group drawn where its first thread sits. Dragging a project header, or pressing Alt+Up or Alt+Down on it, moves the whole group; threads inside a group reorder among themselves.
+- Collapsing Active also hides the project headers, leaving only the open thread.
 - Requires plugin SDK 0.6.5 or newer.
 
 ### Fixed
 
-- **Settle**, **Park**, and **Snooze** are no longer offered for a thread with a queued or failed message, or for an unread thread whose turn is still running. Settled, parked, and snoozed threads in either state return to Active.
-- Automatic settle no longer settles a thread that is still serving a port from its workspace, such as a dev server. Settling stops the thread's runtime, which also stops processes its agent left running, and some providers do not tell bb about them. A thread whose machine cannot be checked is left alone until the next pass.
-
 - Automatic settle no longer settles, or stops the runtime of, a thread that is still waiting on you or has live work: a question or approval, queued messages, a workflow, a background agent or command, plan mode, or a goal. It now uses the same rule as the sidebar's **Settle** action.
+- Automatic settle no longer settles a thread that is still serving a port from its workspace, such as a dev server. Settling stops the thread's runtime, which also stops processes its agent left running, and some providers do not tell bb about them. A thread whose machine cannot be checked is left alone until the next pass.
+- **Settle**, **Park**, and **Snooze** are no longer offered for a thread with a queued or failed message, or for an unread thread whose turn is still running. Settled, parked, and snoozed threads in either state return to Active.
 - **Regenerate title** works again on current bb, which no longer exposes the inference model it read. It now generates the title with the thread's own agent and model, at low reasoning.
 
 ## [0.2.26] - 2026-09-29
