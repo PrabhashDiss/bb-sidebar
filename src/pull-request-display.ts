@@ -28,6 +28,8 @@ export function pullRequestStatusLabel(pullRequest: DisplayPullRequest): string 
       return "Conflicts";
     case "ready_to_merge":
       return "Ready to merge";
+    case "queued":
+      return "In merge queue";
     case "review_requested":
       return "Review requested";
     case "draft":

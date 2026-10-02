@@ -57,7 +57,14 @@ describe("parseGhPullRequest", () => {
 });
 
 describe("mergeThreadPullRequests", () => {
-  const current = { number: 3, title: "Live", url: "u3", state: "open" as const, attention: "checks_pending" as const };
+  const current = {
+    number: 3, title: "Live", url: "u3", state: "open" as const, attention: "checks_pending" as const,
+    experimental_autoMerge: false,
+    experimental_inMergeQueue: false,
+    experimental_checks: { state: "pending" as const },
+    experimental_review: { state: "none" as const },
+    experimental_mergeability: { state: "mergeable" as const },
+  };
 
   it("keeps history order and uses the live PR's status in place", () => {
     const history = [
