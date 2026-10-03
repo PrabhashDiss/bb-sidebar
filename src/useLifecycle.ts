@@ -203,18 +203,6 @@ export function useLifecycle(
   // One policy pass per mounted sidebar gives a freshly opened client current
   // state immediately. The backend coalesces concurrent clients and does the
   // thread and PR work in one batch.
-  useEffect(() => {
-    void rpc
-      .call("evaluateAutoSettle", {})
-      .then(({ changedThreadIds }) => {
-        if (changedThreadIds.length > 0) void refresh();
-      })
-      .catch(() => {
-        void 0; // A backend generation can briefly lag the app bundle during reload.
-        // The scheduled evaluator and realtime refresh will reconcile later.
-      });
-  }, [refresh, rpc]);
-
   useRealtime("lifecycle", () => {
     void refresh();
   });
