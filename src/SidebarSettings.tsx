@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
@@ -21,8 +15,7 @@ import {
   type ChildThreadSortField,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
-import { ProjectIconSettings } from "./ProjectIconSettings";
-import { ProjectRemovalSettings } from "./ProjectRemovalSettings";
+import { ProjectSettings } from "./ProjectSettings";
 import { PortLinkSettings } from "./PortLinkSettings";
 import {
   configuredSnoozePresetError,
@@ -36,89 +29,14 @@ import {
   MAX_AUTO_SETTLE_AFTER_DAYS,
   MIN_AUTO_SETTLE_AFTER_DAYS,
 } from "./auto-settle";
-
-function SettingsGroup({
-  children,
-  description,
-  title,
-}: {
-  children: ReactNode;
-  description: string;
-  title: string;
-}) {
-  return (
-    <section aria-labelledby={`settings-${title.toLowerCase().replaceAll(" ", "-")}`}>
-      <div className="mb-3">
-        <h2
-          id={`settings-${title.toLowerCase().replaceAll(" ", "-")}`}
-          className="text-sm font-semibold text-foreground"
-        >
-          {title}
-        </h2>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          {description}
-        </p>
-      </div>
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-function SettingRow({
-  children,
-  description,
-  title,
-}: {
-  children: ReactNode;
-  description: string;
-  title: string;
-}) {
-  return (
-    <div className="flex min-h-16 items-center justify-between gap-6 border-b border-border px-4 py-3 last:border-b-0">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-          {description}
-        </p>
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
-}
-
-function Switch({
-  checked,
-  disabled,
-  label,
-  onChange,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  label: string;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
-        checked ? "bg-primary" : "bg-muted"
-      }`}
-    >
-      <span
-        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-background shadow-sm transition-transform ${
-          checked ? "translate-x-5" : "translate-x-0"
-        }`}
-      />
-    </button>
-  );
-}
+import {
+  InlineNumber,
+  SettingRow,
+  SettingsSection,
+  SettingsSelect,
+  Switch,
+  type SaveStatus,
+} from "./settings-ui";
 
 const CHILD_SORT_FIELD_LABELS: Record<ChildThreadSortField, string> = {
   created: "Date created",
@@ -129,16 +47,34 @@ const CHILD_ICON_STYLE_LABELS: Record<ChildThreadIconStyle, string> = {
   provider: "Provider icon",
 };
 const CHILD_SORT_DIRECTION_LABELS: Record<ChildThreadSortDirection, string> = {
-  ascending: "Ascending",
-  descending: "Descending",
+  ascending: "Oldest first",
+  descending: "Newest first",
 };
 
-const selectClass =
-  "h-9 w-36 rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+/** Long enough to finish typing a shortcut, short enough to feel instant. */
+const SAVE_DELAY_MS = 500;
+/** How long "Saved" stays beside a section before it fades. */
+const SAVED_VISIBLE_MS = 2_000;
 
-const numberInputClass =
-  "h-9 w-24 rounded-md border border-border bg-background px-2.5 text-right text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground";
+/** The section each setting lives in, so its save feedback shows there. */
+const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
+  inactiveThreadsEnabled: "Shelves",
+  inactiveAfterHours: "Shelves",
+  snoozePresets: "Snooze",
+  autoSettleInactive: "Automatic settle",
+  autoSettleAfterDays: "Automatic settle",
+  autoSettleOnMerge: "Automatic settle",
+  showRunningChildrenWhenCollapsed: "Child threads",
+  childSortField: "Child threads",
+  childSortDirection: "Child threads",
+  childIconStyle: "Child threads",
+  compactWorkingThreads: "Experimental",
+};
 
+/**
+ * The plugin's settings page. Every change saves on its own, as bb's own
+ * settings do; a value that fails validation shows why and is not sent.
+ */
 export function SidebarSettings() {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const loadRequestSeq = useRef(0);
@@ -153,8 +89,24 @@ export function SidebarSettings() {
   const draftRef = useRef(draft);
   savedRef.current = saved;
   draftRef.current = draft;
+  const savingRef = useRef(false);
   const [loading, setLoading] = useState(initialSettings === null);
-  const [saving, setSaving] = useState(false);
+  const changedSectionRef = useRef<string | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<{
+    section: string;
+    status: SaveStatus;
+  } | null>(null);
+  const statusFor = (section: string) =>
+    saveFeedback?.section === section ? saveFeedback.status : undefined;
+
+  useEffect(() => {
+    if (saveFeedback?.status !== "saved") return;
+    const timer = setTimeout(
+      () => setSaveFeedback((current) => (current === saveFeedback ? null : current)),
+      SAVED_VISIBLE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [saveFeedback]);
 
   const load = useCallback(async () => {
     const seq = ++loadRequestSeq.current;
@@ -202,49 +154,78 @@ export function SidebarSettings() {
     (draft.autoSettleInactive && !autoSettleDaysValid) ||
     snoozePresetsError !== null;
   const snoozePreview = snoozePresetsError
-    ? null
-    : parseConfiguredSnoozePresets(draft.snoozePresets)
-        .map((preset) => preset.label)
-        .join(", ");
+    ? []
+    : parseConfiguredSnoozePresets(draft.snoozePresets).map(
+        (preset) => preset.label,
+      );
   const update = <Key extends keyof SidebarSettingsValues>(
     key: Key,
     value: SidebarSettingsValues[Key],
-  ) =>
+  ) => {
+    changedSectionRef.current = SECTION_BY_SETTING[key];
     setDraft((current) => {
       const next = { ...current, [key]: value };
       draftRef.current = next;
       return next;
     });
+  };
 
   const save = async () => {
-    if (!dirty || saving || hasValidationError) return;
+    // One write at a time. When it lands, `saved` changes and the effect
+    // below schedules the next one if the draft moved on meanwhile.
+    if (savingRef.current) return;
+    const sent = draftRef.current;
     // A load started before this write cannot overwrite its result.
     loadRequestSeq.current += 1;
-    setSaving(true);
+    savingRef.current = true;
+    const section = changedSectionRef.current;
+    if (section) setSaveFeedback({ section, status: "saving" });
     try {
       const result = await rpc.call("updateSidebarSettings", {
-        ...draft,
+        ...sent,
+        // A disabled rule may hold a half-typed number; send a valid one.
         inactiveAfterHours: inactiveHoursValid
-          ? draft.inactiveAfterHours
+          ? sent.inactiveAfterHours
           : DEFAULT_SIDEBAR_SETTINGS.inactiveAfterHours,
         autoSettleAfterDays: autoSettleDaysValid
-          ? draft.autoSettleAfterDays
+          ? sent.autoSettleAfterDays
           : DEFAULT_SIDEBAR_SETTINGS.autoSettleAfterDays,
       });
       const cached = cacheSidebarSettings(rpc, result);
       savedRef.current = cached;
-      draftRef.current = cached;
       setSaved(cached);
-      setDraft(cached);
-      toast.success("Sidebar settings saved");
+      if (draftRef.current === sent) {
+        draftRef.current = cached;
+        setDraft(cached);
+      }
+      if (section) setSaveFeedback({ section, status: "saved" });
     } catch (error) {
+      if (section) setSaveFeedback({ section, status: "error" });
       toast.error("Could not save sidebar settings", {
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
-      setSaving(false);
+      savingRef.current = false;
     }
   };
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const pendingSave = !loading && dirty && !hasValidationError;
+  const pendingSaveRef = useRef(pendingSave);
+  pendingSaveRef.current = pendingSave;
+
+  useEffect(() => {
+    if (!pendingSave) return;
+    const timer = setTimeout(() => void saveRef.current(), SAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [draft, saved, pendingSave]);
+  // Leaving the page inside the delay still keeps the last change.
+  useEffect(
+    () => () => {
+      if (pendingSaveRef.current) void saveRef.current();
+    },
+    [],
+  );
 
   if (loading) {
     return (
@@ -256,60 +237,45 @@ export function SidebarSettings() {
 
   return (
     <div className="max-w-3xl space-y-8 pb-4">
-      <PortLinkSettings />
-      <SettingsGroup
-        title="Thread organization"
-        description="Choose when threads leave Active and which snooze shortcuts appear in the sidebar."
-      >
+      <SettingsSection title="Shelves" status={statusFor("Shelves")}>
         <SettingRow
           title="Inactive shelf"
-          description="Move quiet, unpinned threads out of Active. New activity moves them back."
-        >
-          <Switch
-            label="Inactive shelf"
-            checked={draft.inactiveThreadsEnabled}
-            onChange={(checked) => update("inactiveThreadsEnabled", checked)}
-          />
-        </SettingRow>
-        <SettingRow
-          title="Move after"
-          description="Hours without thread activity."
-        >
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              aria-label="Hours before inactive"
-              min={1}
-              max={720}
-              value={draft.inactiveAfterHours}
-              disabled={!draft.inactiveThreadsEnabled}
-              aria-invalid={
-                draft.inactiveThreadsEnabled && !inactiveHoursValid
-              }
-              aria-describedby={
-                draft.inactiveThreadsEnabled && !inactiveHoursValid
-                  ? "inactive-hours-error"
-                  : undefined
-              }
-              onChange={(event) =>
-                update("inactiveAfterHours", Number(event.target.value))
-              }
-              className={numberInputClass}
+          description="Move quiet, unpinned threads out of Active. New activity brings them back."
+          control={
+            <Switch
+              label="Inactive shelf"
+              checked={draft.inactiveThreadsEnabled}
+              onChange={(checked) => update("inactiveThreadsEnabled", checked)}
             />
-            <span className="w-10 text-xs text-muted-foreground">hours</span>
-          </div>
-          {draft.inactiveThreadsEnabled && !inactiveHoursValid ? (
-            <p
-              id="inactive-hours-error"
-              className="mt-1 max-w-40 text-right text-2xs text-destructive"
-            >
-              Enter a whole number from 1 to 720.
-            </p>
+          }
+        >
+          {draft.inactiveThreadsEnabled ? (
+            <InlineNumber
+              label="Hours before inactive"
+              prefix="After"
+              suffix="hours without activity"
+              value={draft.inactiveAfterHours}
+              min={MIN_INACTIVE_AFTER_HOURS}
+              max={MAX_INACTIVE_AFTER_HOURS}
+              valid={inactiveHoursValid}
+              errorId="inactive-hours-error"
+              onChange={(value) => update("inactiveAfterHours", value)}
+            />
           ) : null}
         </SettingRow>
+      </SettingsSection>
+
+      <SettingsSection title="Snooze" status={statusFor("Snooze")}>
         <SettingRow
           title="Snooze shortcuts"
-          description="Separate shortcuts with commas. Use durations like 1h or Wait refresh=5h, and calendar times like evening@18:00, tomorrow@09:00, or next-week@09:00. Rename any choice with Label=value. Times use your local timezone; next week means Monday."
+          description={
+            <>
+              Comma-separated. Durations like <Code>30m</Code> or{" "}
+              <Code>2h</Code>, times like <Code>evening@18:00</Code>,{" "}
+              <Code>tomorrow@09:00</Code> or <Code>next-week@09:00</Code>.
+              Rename one with <Code>Label=value</Code>.
+            </>
+          }
         >
           <textarea
             aria-label="Snooze shortcuts"
@@ -317,192 +283,181 @@ export function SidebarSettings() {
             aria-describedby="snooze-shortcuts-feedback"
             value={draft.snoozePresets}
             onChange={(event) => update("snoozePresets", event.target.value)}
-            rows={4}
-            className="w-72 max-w-full resize-y rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+            rows={2}
+            spellCheck={false}
+            className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-2 font-mono text-xs leading-5 text-foreground outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring aria-[invalid=true]:border-destructive"
           />
-          <p
-            id="snooze-shortcuts-feedback"
-            className={`mt-1 max-w-72 text-right text-2xs ${
-              snoozePresetsError
-                ? "text-destructive"
-                : "text-muted-foreground"
-            }`}
-          >
-            {snoozePresetsError ?? `Menu: ${snoozePreview}`}
-          </p>
-        </SettingRow>
-        <SettingRow
-          title="Show children that need attention"
-          description="Keep child threads that report a status visible when their child section is collapsed. Idle children stay folded."
-        >
-          <Switch
-            label="Show children that need attention"
-            checked={draft.showRunningChildrenWhenCollapsed}
-            onChange={(checked) =>
-              update("showRunningChildrenWhenCollapsed", checked)
-            }
-          />
-        </SettingRow>
-        <SettingRow
-          title="Compact working threads (experimental)"
-          description="Show a thread that is working as one line, like a settled thread, with a small status icon and how long it has run. It returns to a full card when it finishes, fails, or needs you."
-        >
-          <Switch
-            label="Compact working threads"
-            checked={draft.compactWorkingThreads}
-            onChange={(checked) => update("compactWorkingThreads", checked)}
-          />
-        </SettingRow>
-      </SettingsGroup>
-
-      <SettingsGroup
-        title="Child threads"
-        description="How child threads look and in which order they appear under their parent, in the sidebar and in the thread header."
-      >
-        <SettingRow
-          title="Sort"
-          description="Which date orders child threads, and in which direction. Descending puts the newest on top."
-        >
-          <div className="flex items-center gap-2">
-            <select
-              aria-label="Child threads sort field"
-              value={draft.childSortField}
-              onChange={(event) =>
-                update(
-                  "childSortField",
-                  event.target.value as ChildThreadSortField,
-                )
-              }
-              className={selectClass}
-            >
-              {CHILD_THREAD_SORT_FIELDS.map((field) => (
-                <option key={field} value={field}>
-                  {CHILD_SORT_FIELD_LABELS[field]}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Child threads sort direction"
-              value={draft.childSortDirection}
-              onChange={(event) =>
-                update(
-                  "childSortDirection",
-                  event.target.value as ChildThreadSortDirection,
-                )
-              }
-              className={selectClass}
-            >
-              {CHILD_THREAD_SORT_DIRECTIONS.map((direction) => (
-                <option key={direction} value={direction}>
-                  {CHILD_SORT_DIRECTION_LABELS[direction]}
-                </option>
-              ))}
-            </select>
+          <div id="snooze-shortcuts-feedback" className="mt-1.5">
+            {snoozePresetsError ? (
+              <p className="text-2xs text-destructive">{snoozePresetsError}</p>
+            ) : (
+              <ul
+                aria-label="Snooze menu preview"
+                className="flex flex-wrap items-center gap-1"
+              >
+                {snoozePreview.map((label, index) => (
+                  <li
+                    key={`${index}-${label}`}
+                    className="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-2xs text-muted-foreground"
+                  >
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </SettingRow>
-        <SettingRow
-          title="Child thread icon"
-          description="A colour circle per thread, or the icon of the agent the thread runs on. With provider icons, the parent's badge shows each agent once."
-        >
-          <select
-            aria-label="Child thread icon"
-            value={draft.childIconStyle}
-            onChange={(event) =>
-              update(
-                "childIconStyle",
-                event.target.value as ChildThreadIconStyle,
-              )
-            }
-            className={selectClass}
-          >
-            {CHILD_THREAD_ICON_STYLES.map((style) => (
-              <option key={style} value={style}>
-                {CHILD_ICON_STYLE_LABELS[style]}
-              </option>
-            ))}
-          </select>
-        </SettingRow>
-      </SettingsGroup>
+      </SettingsSection>
 
-      <SettingsGroup
-        title="Automatic cleanup"
-        description="Settle finished work automatically. Settled threads remain available in their own shelf."
-      >
+      <SettingsSection title="Automatic settle" status={statusFor("Automatic settle")}>
         <SettingRow
-          title="Settle inactive threads"
+          title="Settle quiet threads"
           description="Move threads to Settled after a longer quiet period."
-        >
-          <Switch
-            label="Settle inactive threads"
-            checked={draft.autoSettleInactive}
-            onChange={(checked) => update("autoSettleInactive", checked)}
-          />
-        </SettingRow>
-        <SettingRow
-          title="Settle after"
-          description="Days without thread activity."
-        >
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              aria-label="Days before auto-settle"
-              min={1}
-              max={90}
-              value={draft.autoSettleAfterDays}
-              disabled={!draft.autoSettleInactive}
-              aria-invalid={draft.autoSettleInactive && !autoSettleDaysValid}
-              aria-describedby={
-                draft.autoSettleInactive && !autoSettleDaysValid
-                  ? "auto-settle-days-error"
-                  : undefined
-              }
-              onChange={(event) =>
-                update("autoSettleAfterDays", Number(event.target.value))
-              }
-              className={numberInputClass}
+          control={
+            <Switch
+              label="Settle inactive threads"
+              checked={draft.autoSettleInactive}
+              onChange={(checked) => update("autoSettleInactive", checked)}
             />
-            <span className="w-10 text-xs text-muted-foreground">days</span>
-          </div>
-          {draft.autoSettleInactive && !autoSettleDaysValid ? (
-            <p
-              id="auto-settle-days-error"
-              className="mt-1 max-w-40 text-right text-2xs text-destructive"
-            >
-              Enter a whole number from 1 to 90.
-            </p>
+          }
+        >
+          {draft.autoSettleInactive ? (
+            <InlineNumber
+              label="Days before auto-settle"
+              prefix="After"
+              suffix="days without activity"
+              value={draft.autoSettleAfterDays}
+              min={MIN_AUTO_SETTLE_AFTER_DAYS}
+              max={MAX_AUTO_SETTLE_AFTER_DAYS}
+              valid={autoSettleDaysValid}
+              errorId="auto-settle-days-error"
+              onChange={(value) => update("autoSettleAfterDays", value)}
+            />
           ) : null}
         </SettingRow>
         <SettingRow
           title="Settle merged pull requests"
-          description={
-            "Settle a thread when its pull request is merged. " +
-            "Closed pull requests are always treated as finished."
+          description="Closed pull requests always count as finished."
+          control={
+            <Switch
+              label="Settle merged pull requests"
+              checked={draft.autoSettleOnMerge}
+              onChange={(checked) => update("autoSettleOnMerge", checked)}
+            />
           }
-        >
-          <Switch
-            label="Settle merged pull requests"
-            checked={draft.autoSettleOnMerge}
-            onChange={(checked) => update("autoSettleOnMerge", checked)}
-          />
-        </SettingRow>
-      </SettingsGroup>
+        />
+      </SettingsSection>
 
-      <div className="flex items-center justify-end gap-3">
-        {dirty ? (
-          <span className="text-xs text-muted-foreground">Unsaved changes</span>
-        ) : null}
-        <button
-          type="button"
-          disabled={!dirty || saving || hasValidationError}
-          onClick={() => void save()}
-          className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save changes"}
-        </button>
-      </div>
+      <SettingsSection title="Child threads" status={statusFor("Child threads")}>
+        <SettingRow
+          title="Show children that need attention"
+          description="Keep children with a status visible while their list is collapsed."
+          control={
+            <Switch
+              label="Show children that need attention"
+              checked={draft.showRunningChildrenWhenCollapsed}
+              onChange={(checked) =>
+                update("showRunningChildrenWhenCollapsed", checked)
+              }
+            />
+          }
+        />
+        <SettingRow
+          title="Order"
+          description="Also used in the thread header."
+          control={
+            <div className="flex items-center gap-2">
+              <SettingsSelect
+                aria-label="Child threads sort field"
+                value={draft.childSortField}
+                onChange={(event) =>
+                  update(
+                    "childSortField",
+                    event.target.value as ChildThreadSortField,
+                  )
+                }
+                className="w-36"
+              >
+                {CHILD_THREAD_SORT_FIELDS.map((field) => (
+                  <option key={field} value={field}>
+                    {CHILD_SORT_FIELD_LABELS[field]}
+                  </option>
+                ))}
+              </SettingsSelect>
+              <SettingsSelect
+                aria-label="Child threads sort direction"
+                value={draft.childSortDirection}
+                onChange={(event) =>
+                  update(
+                    "childSortDirection",
+                    event.target.value as ChildThreadSortDirection,
+                  )
+                }
+                className="w-32"
+              >
+                {CHILD_THREAD_SORT_DIRECTIONS.map((direction) => (
+                  <option key={direction} value={direction}>
+                    {CHILD_SORT_DIRECTION_LABELS[direction]}
+                  </option>
+                ))}
+              </SettingsSelect>
+            </div>
+          }
+        />
+        <SettingRow
+          title="Icon"
+          description="With provider icons, a parent's badge shows each agent once."
+          control={
+            <SettingsSelect
+              aria-label="Child thread icon"
+              value={draft.childIconStyle}
+              onChange={(event) =>
+                update(
+                  "childIconStyle",
+                  event.target.value as ChildThreadIconStyle,
+                )
+              }
+              className="w-36"
+            >
+              {CHILD_THREAD_ICON_STYLES.map((style) => (
+                <option key={style} value={style}>
+                  {CHILD_ICON_STYLE_LABELS[style]}
+                </option>
+              ))}
+            </SettingsSelect>
+          }
+        />
+      </SettingsSection>
 
-      <ProjectIconSettings />
-      <ProjectRemovalSettings />
+      <ProjectSettings />
+
+      <SettingsSection title="This device" status={statusFor("This device")}>
+        <PortLinkSettings
+          onSaved={() => setSaveFeedback({ section: "This device", status: "saved" })}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Experimental" status={statusFor("Experimental")}>
+        <SettingRow
+          title="Compact working threads"
+          description="Show a working thread as one line with a small status icon and its run time. It becomes a full card again when it finishes, fails, or needs you."
+          control={
+            <Switch
+              label="Compact working threads"
+              checked={draft.compactWorkingThreads}
+              onChange={(checked) => update("compactWorkingThreads", checked)}
+            />
+          }
+        />
+      </SettingsSection>
     </div>
+  );
+}
+
+function Code({ children }: { children: string }) {
+  return (
+    <code className="rounded bg-muted px-1 py-px font-mono text-2xs text-foreground/80">
+      {children}
+    </code>
   );
 }

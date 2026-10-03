@@ -9,6 +9,7 @@
 
 ### Changed
 
+- The settings page is reorganised to match bb's own: Shelves, Snooze, Automatic settle, Child threads, Projects, This device, and Experimental. Changes save as you make them, so there is no Save button: the section you changed shows **Saving…** and then **Saved**, or **Not saved** if the save failed. An invalid value shows why and is not saved. The hours and days for the inactive shelf and automatic settle appear only while their switch is on, the snooze shortcuts show the menu they produce, and one project picker serves both the project icon and removing a project.
 - The right-click menu lists thread actions as Pin, Snooze, Park thread, Settle.
 
 ## [0.2.27] - 2026-10-01

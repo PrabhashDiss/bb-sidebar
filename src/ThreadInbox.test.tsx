@@ -486,12 +486,12 @@ describe("sidebar settings", () => {
       sidebarThreads: { status: "ready", projects: [], threads: [thread({ host: { id: "host_local", name: "Local Mac" } })] },
       rpc: { getSidebarSettings: () => defaultSidebarSettings, listProjectIconSettings: () => ({ projects: [] }) },
     });
-    const select = await screen.findByLabelText("Port links on this device");
+    const select = await screen.findByLabelText("Open port links on");
     expect(within(select).getByRole("option", { name: "Local Mac" })).toBeDefined();
     fireEvent.change(select, { target: { value: "host_local" } });
     expect(localStorage.getItem("bb-sidebar:port-link-host:v1")).toBe("host_local");
   });
-  it("groups related controls and saves them together", async () => {
+  it("groups related controls and saves changes without a save button", async () => {
     let saved: typeof defaultSidebarSettings | null = null;
     renderSlot(sidebarSettings, {}, {
       rpc: {
@@ -513,10 +513,12 @@ describe("sidebar settings", () => {
       },
     });
 
-    expect(await screen.findByText("Thread organization")).toBeDefined();
-    expect(screen.getByText("Child threads")).toBeDefined();
-    expect(screen.getByText("Automatic cleanup")).toBeDefined();
-    expect(screen.getByText("Project icons")).toBeDefined();
+    expect(
+      (await screen.findAllByRole("heading", { level: 2 })).map((heading) => heading.textContent),
+    ).toEqual([
+      "Shelves", "Snooze", "Automatic settle", "Child threads", "Projects", "This device", "Experimental",
+    ]);
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     expect(
       screen
         .getByRole("switch", { name: "Inactive shelf" })
@@ -543,7 +545,6 @@ describe("sidebar settings", () => {
     fireEvent.change(screen.getByLabelText("Child thread icon"), {
       target: { value: "provider" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
       expect(saved).toEqual({
         ...defaultSidebarSettings,
@@ -553,19 +554,35 @@ describe("sidebar settings", () => {
         childSortDirection: "descending",
         childIconStyle: "provider",
       }),
+    );    // The section edited last says it saved; the others stay quiet.
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "Child threads" })).getByRole("status").textContent,
+      ).toBe("Saved"),
     );
+    expect(
+      within(screen.getByRole("region", { name: "Shelves" })).getByRole("status").textContent,
+    ).toBe("");
   });
 
-  it("blocks invalid settings and previews valid snooze shortcuts", async () => {
+  it("does not save invalid settings and previews valid snooze shortcuts", async () => {
+    const saves: unknown[] = [];
     renderSlot(sidebarSettings, {}, {
       rpc: {
         getSidebarSettings: () => defaultSidebarSettings,
+        updateSidebarSettings: (input) => {
+          saves.push(input);
+          return input as typeof defaultSidebarSettings;
+        },
         listProjectIconSettings: () => ({ projects: [] }),
       },
     });
+    const preview = () =>
+      within(screen.getByRole("list", { name: "Snooze menu preview" }))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent);
 
     const snoozeInput = await screen.findByLabelText("Snooze shortcuts");
-    const saveButton = screen.getByRole("button", { name: "Save changes" });
     fireEvent.change(snoozeInput, { target: { value: "later" } });
     expect(snoozeInput.getAttribute("aria-invalid")).toBe("true");
     expect(
@@ -573,25 +590,34 @@ describe("sidebar settings", () => {
         "Use comma-separated durations or calendar times, such as 1h, Wait refresh=5h, evening@18:00, tomorrow@09:00, or next-week@09:00.",
       ),
     ).toBeDefined();
-    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.change(snoozeInput, {
       target: { value: "15m, Lunch=3h" },
     });
-    expect(screen.getByText("Menu: 15 minutes, Lunch")).toBeDefined();
-    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+    expect(preview()).toEqual(["15 minutes", "Lunch"]);
 
     fireEvent.change(snoozeInput, { target: { value: "tomorrow@25:00" } });
-    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
+    expect(snoozeInput.getAttribute("aria-invalid")).toBe("true");
     fireEvent.change(snoozeInput, { target: { value: "Morning=tomorrow@08:30" } });
-    expect(screen.getByText("Menu: Morning")).toBeDefined();
-    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+    expect(preview()).toEqual(["Morning"]);
 
     const inactiveHours = screen.getByLabelText("Hours before inactive");
     fireEvent.change(inactiveHours, { target: { value: "0" } });
     expect(inactiveHours.getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByText("Enter a whole number from 1 to 720.")).toBeDefined();
-    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
+    // Past the save delay, nothing invalid has been sent.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(saves).toEqual([]);
+
+    // Turning the rule off hides the value it no longer uses.
+    fireEvent.click(screen.getByRole("switch", { name: "Inactive shelf" }));
+    expect(screen.queryByLabelText("Hours before inactive")).toBeNull();
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(saves[0]).toMatchObject({
+      inactiveThreadsEnabled: false,
+      inactiveAfterHours: defaultSidebarSettings.inactiveAfterHours,
+      snoozePresets: "Morning=tomorrow@08:30",
+    });
   });
 
   it("uploads a project icon from the file picker", async () => {
@@ -640,7 +666,7 @@ describe("sidebar settings", () => {
         contentBase64: "PHN2Zy8+",
       }),
     );
-    expect(screen.getByText("brand.svg")).toBeDefined();
+    expect(screen.getByText("Uploaded: brand.svg")).toBeDefined();
   });
 
   it("keeps a settings cache written before the child-thread settings", () => {
@@ -691,7 +717,6 @@ describe("sidebar settings", () => {
     await rendered.emitRealtime("sidebar-settings", {});
 
     expect((shortcuts as HTMLInputElement).value).toBe("Local=45m");
-    expect(screen.getByText("Unsaved changes")).toBeDefined();
   });
 
   it("ignores an older project-icon load after a newer refresh", async () => {
@@ -761,7 +786,7 @@ describe("sidebar settings", () => {
     });
 
     expect(await screen.findByText("Projects")).toBeDefined();
-    fireEvent.click(await screen.findByRole("button", { name: "Remove..." }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove…" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
     const confirmation = screen.getByRole("group", {
       name: "Confirm removal of Sidebar",
@@ -779,7 +804,7 @@ describe("sidebar settings", () => {
         confirmation: "Sidebar",
       }),
     );
-    expect(await screen.findByText("No removable projects.")).toBeDefined();
+    expect(await screen.findByText("No projects yet.")).toBeDefined();
     expect(toastMocks.success).toHaveBeenCalledWith("Sidebar removed from BB");
   });
 });
