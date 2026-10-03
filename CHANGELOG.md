@@ -4,6 +4,7 @@
 
 ### Changed
 
+- A compact working row stays compact until everything under it is done: its own turn, its background agents, commands and workflows, and any working child or grandchild. It used to unfold into a full card as soon as the parent's own turn ended. It still unfolds at once if the parent needs you or fails. While only its children run, the row shows its usual status or age, and the badge shows the children still working.
 - A compact working row keeps its child threads folded, including children that need attention, until you expand them from its badge. Full cards still show those children while folded when **Show children that need attention** is on.
 
 ## [0.2.28] - 2026-10-03

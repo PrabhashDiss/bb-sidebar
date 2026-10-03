@@ -440,7 +440,7 @@ export function SidebarSettings() {
       <SettingsSection title="Experimental" status={statusFor("Experimental")}>
         <SettingRow
           title="Compact working threads"
-          description="Show a working thread as one line with a small status icon and its run time. It becomes a full card again when it finishes, fails, or needs you."
+          description="Show a working thread as one line with a small status icon and its run time. It stays that way while its child threads or background agents run, and becomes a full card when all of it is done, or when it fails or needs you."
           control={
             <Switch
               label="Compact working threads"

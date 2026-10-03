@@ -28,7 +28,8 @@ import { STATUS_SLOT_CLASS, StatusOrTime, threadShortStatus } from "./StatusSlot
 import { CompactLiveStatus } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
-import type { ConfiguredSnoozePreset } from "./lifecycle";
+import { isThreadWorking, type ConfiguredSnoozePreset } from "./lifecycle";
+import { childStatusKind, childSubtree } from "./child-status";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { OpenPortsIndicator } from "./OpenPorts";
 import { JumpHint, useJumpHint } from "./JumpHints";
@@ -115,10 +116,21 @@ export function ThreadCard({
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
   const childListId = useId();
-  // Only work the card would label with a running duration folds; a thread
-  // that needs you, failed, or just woke keeps the full card.
+  const liveStatus = threadShortStatus(thread)?.showsDuration === true;
+  // A thread stays folded until everything under it is done: its own turn,
+  // its background agents and commands, and any working child or grandchild.
+  // Only the thread itself needing you, failing, or just waking unfolds it.
   const compact =
-    compactWhenWorking && !isWoke && threadShortStatus(thread)?.showsDuration === true;
+    compactWhenWorking &&
+    !isWoke &&
+    !thread.hasPendingInteraction &&
+    thread.indicator !== "unread-error" &&
+    thread.queuedWork !== "failed" &&
+    (liveStatus ||
+      isThreadWorking(thread) ||
+      childSubtree(childThreads, childrenByParent).some(
+        (child) => childStatusKind(child) === "working",
+      ));
   // A folded row stays one line: its children wait for the badge to expand
   // them, whatever "Show children that need attention" says.
   const showChildrenWhenCollapsed = showRunningChildrenWhenCollapsed && !compact;
@@ -276,7 +288,10 @@ export function ThreadCard({
                   thread={thread}
                   editing={isRenaming}
                   onEditingChange={setIsRenaming}
-                  className="min-w-0 flex-1 truncate text-foreground"
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-foreground",
+                    thread.isUnread && "font-medium",
+                  )}
                 />
               </span>
               <span className="pointer-events-none relative flex shrink-0 items-center gap-1.5">
@@ -295,7 +310,14 @@ export function ThreadCard({
                 ) : (
                   <>
                     {unpinButton}
-                    <CompactLiveStatus thread={thread} now={now} />
+                    {/* The parent's own run time while it works; otherwise its
+                        usual status or age, with the badge showing the
+                        children still running. */}
+                    {liveStatus ? (
+                      <CompactLiveStatus thread={thread} now={now} />
+                    ) : (
+                      <StatusOrTime thread={thread} now={now} />
+                    )}
                   </>
                 )}
               </span>

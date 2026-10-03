@@ -4400,6 +4400,48 @@ describe("parking threads", () => {
     },
   );
 
+  it("keeps a row compact until its children and agents are done", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "waiting-on-child", title: "Waiting on child" }),
+          thread({ id: "child", parentThreadId: "waiting-on-child", title: "Child work", indicator: "runtime" }),
+          thread({ id: "asking", title: "Asking parent", hasPendingInteraction: true }),
+          thread({ id: "asking-child", parentThreadId: "asking", title: "Asking child", indicator: "runtime" }),
+          thread({
+            id: "agent",
+            title: "Agent parent",
+            activity: { workflows: 0, backgroundAgents: 1, backgroundCommands: 0, planMode: 0, goals: 0 },
+          }),
+          thread({ id: "done", title: "Done parent" }),
+          thread({ id: "done-child", parentThreadId: "done", title: "Done child" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        getSidebarSettings: () => ({
+          ...defaultSidebarSettings,
+          inactiveThreadsEnabled: false,
+          compactWorkingThreads: true,
+        }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+    const isCompact = (title: string) =>
+      screen
+        .getByRole("link", { name: title })
+        .closest("[data-parent-card]")!
+        .classList.contains("h-8");
+    await screen.findByRole("link", { name: "Waiting on child" });
+
+    await waitFor(() => expect(isCompact("Waiting on child")).toBe(true));
+    expect(isCompact("Agent parent")).toBe(true);
+    // The parent's own question outranks its children's work.
+    expect(isCompact("Asking parent")).toBe(false);
+    expect(isCompact("Done parent")).toBe(false);
+  });
+
   it("snoozes to a picked date and time from the snooze menu", async () => {
     const snooze = vi.fn(() => ({ ok: true }));
     renderSlot(inbox, listProps, {
