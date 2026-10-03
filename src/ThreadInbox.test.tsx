@@ -6892,6 +6892,27 @@ describe("attention states", () => {
 });
 
 describe("pull request badge", () => {
+  it("mounts pull request lookups only while the row is visible", async () => {
+    let notify!: (entries: Array<{ isIntersecting: boolean }>) => void;
+    const disconnect = vi.fn();
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: typeof notify) { notify = callback; }
+      observe() {}
+      disconnect = disconnect;
+    });
+    try {
+      const view = withPr("none");
+      await screen.findByText("A thread");
+      expect(screen.queryByRole("link", { name: "#412" })).toBeNull();
+      await act(async () => notify([{ isIntersecting: true }]));
+      expect(await screen.findByRole("link", { name: "#412" })).toBeTruthy();
+      await act(async () => notify([{ isIntersecting: false }]));
+      expect(screen.queryByRole("link", { name: "#412" })).toBeNull();
+      view.unmount();
+      expect(disconnect).toHaveBeenCalledOnce();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   const withPr = (attention: string, state = "open") =>
     renderSlot(inbox, listProps, {
       sidebarThreads: {
