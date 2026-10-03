@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -7,6 +8,7 @@ import {
 } from "./components/Select";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
+import { SnoozePickerDialog } from "./SnoozePickerDialog";
 import {
   formatSnoozeWakeTime,
   resolveConfiguredSnoozePreset,
@@ -30,12 +32,24 @@ export function SnoozeSelect({
   onSnooze: (snoozedUntil: number) => void;
   onPark?: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
+  // The row keeps its actions revealed until the picker closes too.
+  const open = menuOpen || picking;
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
   return (
+    <>
     <Select
       value=""
       disabled={disabled || (snoozePresets.length === 0 && !onPark)}
-      onOpenChange={onOpenChange}
+      onOpenChange={setMenuOpen}
       onValueChange={(presetId) => {
+        if (presetId === "pick") {
+          setPicking(true);
+          return;
+        }
         if (presetId === "park") {
           onPark?.();
           return;
@@ -70,6 +84,17 @@ export function SnoozeSelect({
             </SelectItem>
           );
         })}
+        {snoozePresets.length > 0 ? (
+          <>
+            <SelectSeparator className="my-1 h-px bg-border" />
+            <SelectItem value="pick" className="text-xs">
+              <span className="flex items-center gap-2">
+                <Icon name="Calendar" className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                Pick date & time…
+              </span>
+            </SelectItem>
+          </>
+        ) : null}
         {onPark ? (
           <>
             {snoozePresets.length > 0 ? <SelectSeparator className="my-1 h-px bg-border" /> : null}
@@ -83,5 +108,11 @@ export function SnoozeSelect({
         ) : null}
       </SelectContent>
     </Select>
+    <SnoozePickerDialog
+      open={picking}
+      onOpenChange={setPicking}
+      onSnooze={onSnooze}
+    />
+    </>
   );
 }

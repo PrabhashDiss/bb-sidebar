@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   configuredSnoozePresetError,
   canPark,
+  combineSnoozeDateTime,
+  defaultPickedSnooze,
+  formatPickedSnooze,
   formatSnoozeWakeTime,
   DEFAULT_SNOOZE_PRESET_CONFIG,
   nextWakeDelayMs,
@@ -181,6 +184,32 @@ describe("formatSnoozeWakeTime", () => {
     const wakeAt = Date.UTC(2026, 7, 23, 1, 30);
     expect(formatSnoozeWakeTime(wakeAt, "en-US", "UTC")).toBe(
       "Aug 23, 2026, 1:30 AM",
+    );
+  });
+});
+
+describe("picked snooze", () => {
+  it("starts tomorrow at 9:00, across a month boundary", () => {
+    const { date, time } = defaultPickedSnooze(new Date(2026, 0, 31, 22));
+    expect(date.getTime()).toBe(new Date(2026, 1, 1).getTime());
+    expect(time).toBe("09:00");
+  });
+
+  it("combines a day and a local time", () => {
+    expect(combineSnoozeDateTime(new Date(2026, 2, 8), "14:05")).toBe(
+      new Date(2026, 2, 8, 14, 5).getTime(),
+    );
+    expect(combineSnoozeDateTime(new Date(2026, 2, 8), "")).toBeNull();
+    expect(combineSnoozeDateTime(new Date(2026, 2, 8), "24:00")).toBeNull();
+  });
+
+  it("previews the wake time, naming the year only when it differs", () => {
+    const now = new Date(Date.UTC(2026, 9, 3, 12));
+    expect(formatPickedSnooze(Date.UTC(2026, 9, 4, 9), now, "en-US", "UTC")).toBe(
+      "Sun, Oct 4, 9:00 AM",
+    );
+    expect(formatPickedSnooze(Date.UTC(2027, 0, 4, 9), now, "en-US", "UTC")).toBe(
+      "Mon, Jan 4, 2027, 9:00 AM",
     );
   });
 });

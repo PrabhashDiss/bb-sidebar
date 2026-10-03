@@ -369,3 +369,52 @@ export function nextWakeDelayMs(
   const soonest = Math.min(...upcoming);
   return Math.min(Math.max(0, soonest - now) + 50, MAX_TIMEOUT_MS);
 }
+
+/** The latest wake a picked date may set; presets share the same one-year cap. */
+export const MAX_SNOOZE_MS = 365 * DAY_MS;
+
+/**
+ * Where the date-and-time picker starts: tomorrow at 9:00, the same default as
+ * the "Tomorrow morning" shortcut.
+ */
+export function defaultPickedSnooze(now = new Date()): { date: Date; time: string } {
+  const date = new Date(now);
+  date.setDate(date.getDate() + 1);
+  date.setHours(0, 0, 0, 0);
+  return { date, time: "09:00" };
+}
+
+/**
+ * Combine a picked calendar day with an `HH:MM` time, in the device's local
+ * timezone. Null when the time is malformed; the caller decides whether the
+ * result is far enough in the future.
+ */
+export function combineSnoozeDateTime(date: Date, time: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  const wake = new Date(date);
+  wake.setHours(hour, minute, 0, 0);
+  return wake.getTime();
+}
+
+/** Picker preview: "Sun, Oct 4, 9:00 AM", with the year only when it differs. */
+export function formatPickedSnooze(
+  snoozedUntil: number,
+  now = new Date(),
+  locale?: string,
+  timeZone?: string,
+): string {
+  const wake = new Date(snoozedUntil);
+  return new Intl.DateTimeFormat(locale, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(wake.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+    hour: "numeric",
+    minute: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
+  }).format(wake);
+}

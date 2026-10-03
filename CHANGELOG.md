@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Snooze offers **Pick date & time…** below its shortcuts, in both the row's clock menu and the right-click menu. It opens a calendar and a time field, starting at tomorrow 9:00, and shows the exact wake time before you confirm. Past times and dates more than a year out cannot be picked.
+
+### Changed
+
+- The right-click menu lists thread actions as Pin, Snooze, Park thread, Settle.
+
 ## [0.2.27] - 2026-10-01
 
 ### Added

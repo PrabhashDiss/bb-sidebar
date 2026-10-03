@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type { bbSidebarRpcContract } from "./server";
 import { ParentThreadMenu } from "./ParentThreadMenu";
 import { DeleteThreadDialog } from "./DeleteThreadDialog";
+import { SnoozePickerDialog } from "./SnoozePickerDialog";
 import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
@@ -66,6 +67,7 @@ export function RowContextMenu({
   const regenerating = useTitleGenerating(thread.id);
   const renameAfterClose = useRef(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [pickingSnooze, setPickingSnooze] = useState(false);
   // Archive takes the children with it, and bb leaves every idle one's agent
   // session loaded. Release them alongside the archive. Working children are
   // skipped, so this never interrupts a turn archive itself would not.
@@ -123,8 +125,8 @@ export function RowContextMenu({
           aria-label="Thread actions"
           onCloseAutoFocus={(event) => {
             onCloseAutoFocus?.(event);
-            // The delete dialog takes focus next; do not pull it back to the row.
-            if (confirmingDelete) event.preventDefault();
+            // A dialog takes focus next; do not pull it back to the row.
+            if (confirmingDelete || pickingSnooze) event.preventDefault();
             if (!renameAfterClose.current) return;
             renameAfterClose.current = false;
             // Hand focus to the editor after the menu releases its focus scope.
@@ -156,14 +158,18 @@ export function RowContextMenu({
           <Item icon={thread.isPinned ? "PinOff" : "Pin"} onSelect={() => void togglePin()}>
             {thread.isPinned ? "Unpin" : "Pin"}
           </Item>
+          {canSnooze && onSnooze && snoozePresets.length > 0 ? (
+            <SnoozeSubmenu
+              presets={snoozePresets}
+              onSnooze={onSnooze}
+              onPick={() => setPickingSnooze(true)}
+            />
+          ) : null}
+          {onWake ? <Item icon="Pulse" onSelect={onWake}>Wake now</Item> : null}
           {onPark ? <Item icon="Car" onSelect={onPark}>Park thread</Item> : null}
           {onResume ? <Item icon="Pulse" onSelect={onResume}>Resume</Item> : null}
           {onSettle ? <Item icon="Meditation" onSelect={onSettle}>Settle</Item> : null}
           {onUnsettle ? <Item icon="Pulse" onSelect={onUnsettle}>Un-settle</Item> : null}
-          {canSnooze && onSnooze && snoozePresets.length > 0 ? (
-            <SnoozeSubmenu presets={snoozePresets} onSnooze={onSnooze} />
-          ) : null}
-          {onWake ? <Item icon="Pulse" onSelect={onWake}>Wake now</Item> : null}
           <Separator />
           {onRename ? (
             <Item onSelect={() => { renameAfterClose.current = true; }}>
@@ -196,6 +202,9 @@ export function RowContextMenu({
     )}
     </ProjectActions>
     <DeleteThreadDialog thread={thread} open={confirmingDelete} onOpenChange={setConfirmingDelete} />
+    {onSnooze ? (
+      <SnoozePickerDialog open={pickingSnooze} onOpenChange={setPickingSnooze} onSnooze={onSnooze} />
+    ) : null}
     </>
   );
 }
@@ -258,9 +267,11 @@ function CopySubmenu({ thread }: { thread: PluginSidebarThread }) {
 function SnoozeSubmenu({
   presets,
   onSnooze,
+  onPick,
 }: {
   presets: readonly ConfiguredSnoozePreset[];
   onSnooze: (snoozedUntil: number) => void;
+  onPick: () => void;
 }) {
   const portalScope = usePortalScopeProps();
   return (
@@ -298,6 +309,8 @@ function SnoozeSubmenu({
               </Item>
             );
           })}
+          <Separator />
+          <Item icon="Calendar" onSelect={onPick}>Pick date & time…</Item>
         </ContextMenu.SubContent>
       </ContextMenu.Portal>
     </ContextMenu.Sub>

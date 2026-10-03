@@ -4299,6 +4299,47 @@ describe("parking threads", () => {
     );
   });
 
+  it("snoozes to a picked date and time from the snooze menu", async () => {
+    const snooze = vi.fn(() => ({ ok: true }));
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_pick", title: "Later work" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: { listLifecycle: () => ({ rows: [] }), snooze },
+    });
+
+    fireEvent.keyDown(
+      await screen.findByRole("combobox", { name: "Snooze thread" }),
+      { key: "Enter" },
+    );
+    fireEvent.click(await screen.findByRole("option", { name: "Pick date & time…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Snooze until" });
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    expect(within(dialog).getByText(/^Wakes /)).toBeDefined();
+
+    const time = within(dialog).getByLabelText("Time");
+    fireEvent.change(time, { target: { value: "" } });
+    expect(within(dialog).getByText("Enter a time.")).toBeDefined();
+    expect(
+      within(dialog).getByRole("button", { name: "Snooze" }).hasAttribute("disabled"),
+    ).toBe(true);
+
+    fireEvent.change(time, { target: { value: "16:45" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Snooze" }));
+    await waitFor(() =>
+      expect(snooze).toHaveBeenCalledWith({
+        threadId: "thr_pick",
+        snoozedUntil: new Date(
+          tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 16, 45,
+        ).getTime(),
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   // jsdom cannot evaluate `@media (hover: none)`, so the regression this
   // guards — a touch layout that faded the status out behind the park actions
   // — only shows in the class contract. The structural half is asserted too:
@@ -5074,9 +5115,9 @@ describe("row context menu", () => {
       "Parent",
       "Project",
       "Pin",
+      "Snooze",
       "Park thread",
       "Settle",
-      "Snooze",
       "Rename",
       "Regenerate title",
       "Mark unread",
