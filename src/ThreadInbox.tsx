@@ -1393,6 +1393,7 @@ export function ThreadInbox({
       onToggleChildren={() => toggleChildExpansion(thread.id)}
       reorder={
         !reorderable ||
+        (shelf === "pinned" && thread.pinSortKey == null) ||
         (shelf === "inbox" &&
           (activeSortMode === "activity" || activeSortMode === "created"))
           ? undefined

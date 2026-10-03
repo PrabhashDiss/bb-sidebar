@@ -63,11 +63,15 @@ const defaultSidebarSettings = {
   dockShelves: false,
 };
 
+let nextPinnedKey = 0;
+
 function thread(
   overrides: Partial<PluginSidebarThread> = {},
 ): PluginSidebarThread {
   return {
     ...idleSidebarThreadFields,
+    // Confirmed pins carry keys in canonical BB; explicit null models a provisional pin.
+    ...(overrides.isPinned ? { pinnedAt: 100, pinSortKey: `U${String(nextPinnedKey++).padStart(6, "0")}U` } : {}),
     id: "thr_1",
     projectId: "proj_1",
     title: "A thread",
@@ -410,6 +414,7 @@ function deferred<T>() {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  nextPinnedKey = 0;
   toastMocks.success.mockReset();
   toastMocks.error.mockReset();
   vi.mocked(document.elementFromPoint).mockReset();
@@ -2661,6 +2666,155 @@ describe("ThreadInbox", () => {
       expect.stringContaining("Pin B"),
       expect.stringContaining("Pin A"),
       expect.stringContaining("Pin C"),
+    ]);
+  });
+
+  it.each([false, true])("skips provisional null pin keys and retains eligible child roots: child=%s", async (withChild) => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Confirmed A", isPinned: true, pinnedAt: 1, pinSortKey: "A" }),
+          thread({ id: "b", title: "Confirmed B", isPinned: true, pinnedAt: 2, pinSortKey: "C" }),
+          thread({ id: "pending", title: "Provisional pin", isPinned: true, pinnedAt: 3, pinSortKey: null }),
+          ...(withChild ? [thread({ id: "child", title: "Keyed child", parentThreadId: "pending", isPinned: true, pinnedAt: 4, pinSortKey: "D" })] : []),
+        ],
+        projects: [],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        reorderPinned: (input) => {
+          const { threadId, previousThreadId, nextThreadId } = input as { threadId: string; previousThreadId: string | null; nextThreadId: string | null };
+          // Canonical BB excludes null-key rows from both moving roots and neighbours.
+          if ([threadId, previousThreadId, nextThreadId].includes("pending")) throw new Error("stale_neighbor");
+          return { pinnedThreadIds: ["b", "a", ...(withChild ? ["child"] : []), "pending"] };
+        },
+      },
+    });
+    const card = await screen.findByRole("link", { name: "Confirmed A" });
+    fireEvent.keyDown(card, { key: "ArrowDown", altKey: true });
+    await waitFor(() => expect(rendered.rpcCalls.find((call) => call.method === "reorderPinned")?.input).toEqual({
+      threadId: "a", previousThreadId: "b", nextThreadId: withChild ? "child" : null,
+    }));
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Pinned" })).getAllByRole("link")[0]!.getAttribute("aria-label")).toBe("Confirmed B"));
+    const pending = screen.getByRole("link", { name: "Provisional pin" });
+    expect(pending.getAttribute("aria-keyshortcuts")).toBeNull();
+    fireEvent.keyDown(pending, { key: "ArrowUp", altKey: true });
+    expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned")).toHaveLength(1);
+  });
+
+  it("sorts pins across projects before choosing reorder neighbors", async () => {
+    let reorderInput: unknown = null;
+    const pin = (id: string, key: string, projectId: string) => ({
+      ...thread({ id, title: `Pin ${id.toUpperCase()}`, isPinned: true, projectId }),
+      pinSortKey: key,
+    });
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        // The SDK flattens project groups, not the global pinned order.
+        threads: [pin("c", "c", "proj_1"), pin("a", "a", "proj_2"), pin("b", "b", "proj_2")],
+        projects: [
+          { id: "proj_1", name: "One", isPersonal: false, href: "", settingsHref: "" },
+          { id: "proj_2", name: "Two", isPersonal: false, href: "", settingsHref: "" },
+        ],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        reorderPinned: (input) => {
+          reorderInput = input;
+          return { pinnedThreadIds: ["a", "c", "b"] };
+        },
+      },
+    });
+    const pinned = await screen.findByRole("region", { name: "Pinned" });
+    expect(within(pinned).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Pin A"),
+      expect.stringContaining("Pin B"),
+      expect.stringContaining("Pin C"),
+    ]);
+    fireEvent.keyDown(screen.getByRole("link", { name: "Pin C" }), { key: "ArrowUp", altKey: true });
+    await waitFor(() => expect(reorderInput).toEqual({
+      threadId: "c", previousThreadId: "a", nextThreadId: "b",
+    }));
+    await waitFor(() => expect(within(pinned).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Pin A"),
+      expect.stringContaining("Pin C"),
+      expect.stringContaining("Pin B"),
+    ]));
+  });
+
+  it("allows a pinned child of an unpinned parent to anchor a reorder", async () => {
+    let reorderInput: unknown = null;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          thread({ id: "child", title: "Pinned child", parentThreadId: "unpinned-parent", isPinned: true }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+          thread({ id: "c", title: "Pin C", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        reorderPinned: (input) => {
+          reorderInput = input;
+          return { pinnedThreadIds: ["a", "child", "c", "b"] };
+        },
+      },
+    });
+    fireEvent.keyDown(await screen.findByRole("link", { name: "Pin C" }), { key: "ArrowUp", altKey: true });
+    await waitFor(() => expect(reorderInput).toEqual({
+      threadId: "c", previousThreadId: "child", nextThreadId: "b",
+    }));
+  });
+
+  it("never sends a pinned child thread as a reorder neighbor", async () => {
+    let reorderInput: unknown = null;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Pin A", isPinned: true }),
+          // Hidden behind A's header chip, but still in bb's pinned order.
+          thread({
+            id: "child",
+            title: "Pinned child",
+            parentThreadId: "a",
+            isPinned: true,
+          }),
+          thread({ id: "b", title: "Pin B", isPinned: true }),
+          thread({ id: "c", title: "Pin C", isPinned: true }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        reorderPinned: (input) => {
+          reorderInput = input;
+          return { pinnedThreadIds: ["a", "c", "child", "b"] };
+        },
+      },
+    });
+
+    const pinC = await screen.findByRole("link", { name: "Pin C" });
+    fireEvent.keyDown(pinC, { key: "ArrowUp", altKey: true });
+    await waitFor(() =>
+      expect(reorderInput).toEqual({
+        threadId: "c",
+        previousThreadId: "a",
+        nextThreadId: "b",
+      }),
+    );
+    const pinned = screen.getByRole("region", { name: "Pinned" });
+    expect(
+      within(pinned).getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Pin A"),
+      expect.stringContaining("Pin C"),
+      expect.stringContaining("Pin B"),
     ]);
   });
 

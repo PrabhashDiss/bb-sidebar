@@ -59,6 +59,22 @@ export function pinnedNeighbors(
   };
 }
 
+/** Sort the SDK's project groups by bb's global, binary-ordered pin key. */
+export function sortPinnedThreads<
+  T extends { readonly id: string; readonly pinSortKey?: string | null },
+>(threads: readonly T[]): T[] {
+  return [...threads].sort((left, right) => {
+    // Older SDKs omit pinSortKey; preserve their incoming order.
+    const leftKey = left.pinSortKey;
+    const rightKey = right.pinSortKey;
+    if (leftKey == null && rightKey == null) return 0;
+    if (leftKey == null) return 1;
+    if (rightKey == null) return -1;
+    if (leftKey !== rightKey) return leftKey < rightKey ? -1 : 1;
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+  });
+}
+
 /** Apply an optimistic or server-confirmed id order to the visible rows. */
 export function orderPinnedThreads<T extends { readonly id: string }>(
   threads: readonly T[],
