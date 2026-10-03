@@ -81,6 +81,7 @@ import {
   projectIconUrl,
 } from "./project-icons";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
+import { isWorkingTree } from "./working-tree";
 import {
   MAX_CHILD_EXPANSION,
   pruneChildExpansion,
@@ -243,6 +244,7 @@ const DRAG_SCROLL_SPEED = 14;
 interface ShelfExpansionState {
   active: boolean;
   pinned: boolean;
+  working: boolean;
   inactive: boolean;
   parked: boolean;
   snoozed: boolean;
@@ -252,6 +254,7 @@ interface ShelfExpansionState {
 const DEFAULT_SHELF_EXPANSION: ShelfExpansionState = {
   active: true,
   pinned: true,
+  working: true,
   inactive: false,
   parked: false,
   snoozed: false,
@@ -268,6 +271,7 @@ function readShelfExpansion(): ShelfExpansionState {
       active: parsed.active !== false,
       // Pinned became independently collapsible after the first stored shape.
       pinned: parsed.pinned !== false,
+      working: parsed.working !== false,
       inactive: parsed.inactive === true,
       parked: parsed.parked === true,
       snoozed: parsed.snoozed === true,
@@ -487,6 +491,8 @@ export function ThreadInbox({
         ? legacySettings.inactiveAfterHours
         : String(DEFAULT_INACTIVE_AFTER_HOURS),
   );
+  const workingShelfEnabled =
+    sidebarSettings?.workingShelf ?? DEFAULT_SIDEBAR_SETTINGS.workingShelf;
   const [scope, setScope] = useState<string>(ALL_PROJECTS);
   useEffect(() => {
     setScope((current) => reconcileProjectScope(current, projects));
@@ -575,6 +581,7 @@ export function ThreadInbox({
   const {
     pinnedBase,
     inboxBase,
+    workingBase,
     inactiveBase,
     allPinnedBase,
     allInboxBase,
@@ -603,9 +610,22 @@ export function ThreadInbox({
     }
     const split = partitionPinned(active);
     const activeUnpinned: typeof split.inbox = [];
+    const working: typeof split.inbox = [];
     const inactive: typeof split.inbox = [];
     for (const thread of split.inbox) {
-      if (isInactiveThread(thread, now, inactiveAfterHours)) {
+      // A thread with work running anywhere under it waits on the Working
+      // shelf, unless it just woke from a snooze: that is news for Active.
+      if (
+        workingShelfEnabled &&
+        !lifecycle.wokeFor(thread) &&
+        isWorkingTree(
+          thread,
+          childrenByParentId.get(thread.id) ?? [],
+          childrenByParentId,
+        )
+      ) {
+        working.push(thread);
+      } else if (isInactiveThread(thread, now, inactiveAfterHours)) {
         inactive.push(thread);
       } else {
         activeUnpinned.push(thread);
@@ -616,6 +636,7 @@ export function ThreadInbox({
       // BB supplies pinned rows in the user's persisted pin order.
       pinnedBase: split.pinned,
       inboxBase: sortByCreatedAtDescending(activeUnpinned),
+      workingBase: sortByCreatedAtDescending(working),
       inactiveBase: sortByCreatedAtDescending(inactive),
       // Keep a global order behind project-scoped and parked views. Child and
       // parked rows are included because they can become visible later; a
@@ -630,7 +651,15 @@ export function ThreadInbox({
       ),
       settled: sortSettledThreads(onSettledShelf, lifecycle.settledAtFor),
     };
-  }, [inactiveAfterHours, lifecycle, now, scope, threads]);
+  }, [
+    childrenByParentId,
+    inactiveAfterHours,
+    lifecycle,
+    now,
+    scope,
+    threads,
+    workingShelfEnabled,
+  ]);
 
   const pinnedReorder = usePinnedReorder(allPinnedBase);
   const inboxReorder = useInboxReorder(allInboxBase);
@@ -697,6 +726,12 @@ export function ThreadInbox({
         : dragOrder.ids,
     );
   }, [dragOrder, orderedInbox, storedProjectUnits]);
+  // Working and Inactive keep Active's manual order, so a thread that leaves
+  // for either comes back to the slot it left.
+  const working = useMemo(
+    () => orderPinnedThreads(workingBase, inboxReorder.ids),
+    [workingBase, inboxReorder.ids],
+  );
   const inactive = useMemo(
     () => orderPinnedThreads(inactiveBase, inboxReorder.ids),
     [inactiveBase, inboxReorder.ids],
@@ -713,6 +748,11 @@ export function ThreadInbox({
   const visibleInbox = useMemo(
     () => visibleShelfThreads(inbox, expandedShelves.active, activeListThreadId),
     [activeListThreadId, expandedShelves.active, inbox],
+  );
+  const visibleWorking = useMemo(
+    () =>
+      visibleShelfThreads(working, expandedShelves.working, activeListThreadId),
+    [activeListThreadId, expandedShelves.working, working],
   );
   const visibleInactive = useMemo(
     () =>
@@ -780,8 +820,9 @@ export function ThreadInbox({
             unit.kind === "thread" ? [unit.thread] : unit.threads,
           )
         : sortActiveThreads(inbox, activeSortMode)),
+      ...working,
     ],
-    [activeSortMode, inbox, inboxProjectUnits, pinned],
+    [activeSortMode, inbox, inboxProjectUnits, pinned, working],
   );
   const nextThreadCandidatesRef = useRef(nextThreadCandidates);
   nextThreadCandidatesRef.current = nextThreadCandidates;
@@ -1236,11 +1277,11 @@ export function ThreadInbox({
   const wokeThreadIds = useMemo(
     () =>
       new Set(
-        [...pinned, ...inbox, ...inactive]
+        [...pinned, ...inbox, ...working, ...inactive]
           .filter((thread) => lifecycle.wokeFor(thread))
           .map((thread) => thread.id),
       ),
-    [inactive, inbox, lifecycle, pinned],
+    [inactive, inbox, lifecycle, pinned, working],
   );
 
   const parkActiveThread = async (
@@ -1454,6 +1495,26 @@ export function ThreadInbox({
                   ) : null}
                 </CollapsibleShelf>
               ) : null}
+              {working.length > 0 ? (
+                <CollapsibleShelf
+                  label="Working"
+                  icon="Loading"
+                  count={working.length}
+                  expanded={expandedShelves.working}
+                  onToggle={() =>
+                    setExpandedShelves((current) => ({
+                      ...current,
+                      working: !current.working,
+                    }))
+                  }
+                >
+                  <Shelf label={null}>
+                    {visibleWorking.map((thread) =>
+                      renderActiveThread(thread, "inbox", false),
+                    )}
+                  </Shelf>
+                </CollapsibleShelf>
+              ) : null}
               {inactive.length > 0 ? (
                 <CollapsibleShelf
                   label="Inactive"
@@ -1476,6 +1537,7 @@ export function ThreadInbox({
               ) : null}
               {pinned.length === 0 &&
               inbox.length === 0 &&
+              working.length === 0 &&
               inactive.length === 0 ? (
                 <ActiveEmptyState />
               ) : null}

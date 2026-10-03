@@ -28,8 +28,8 @@ import { STATUS_SLOT_CLASS, StatusOrTime, threadShortStatus } from "./StatusSlot
 import { CompactLiveStatus } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
-import { isThreadWorking, type ConfiguredSnoozePreset } from "./lifecycle";
-import { childStatusKind, childSubtree } from "./child-status";
+import type { ConfiguredSnoozePreset } from "./lifecycle";
+import { isWorkingTree } from "./working-tree";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { OpenPortsIndicator } from "./OpenPorts";
 import { JumpHint, useJumpHint } from "./JumpHints";
@@ -117,20 +117,12 @@ export function ThreadCard({
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
   const childListId = useId();
   const liveStatus = threadShortStatus(thread)?.showsDuration === true;
-  // A thread stays folded until everything under it is done: its own turn,
-  // its background agents and commands, and any working child or grandchild.
-  // Only the thread itself needing you, failing, or just waking unfolds it.
+  // A thread stays folded until everything under it is done; it unfolds at
+  // once when it needs you, fails, or just woke.
   const compact =
     compactWhenWorking &&
     !isWoke &&
-    !thread.hasPendingInteraction &&
-    thread.indicator !== "unread-error" &&
-    thread.queuedWork !== "failed" &&
-    (liveStatus ||
-      isThreadWorking(thread) ||
-      childSubtree(childThreads, childrenByParent).some(
-        (child) => childStatusKind(child) === "working",
-      ));
+    isWorkingTree(thread, childThreads, childrenByParent);
   // A folded row stays one line: its children wait for the badge to expand
   // them, whatever "Show children that need attention" says.
   const showChildrenWhenCollapsed = showRunningChildrenWhenCollapsed && !compact;

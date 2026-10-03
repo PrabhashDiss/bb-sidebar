@@ -58,6 +58,7 @@ const defaultSidebarSettings = {
   childSortDirection: "ascending",
   childIconStyle: "disc",
   compactWorkingThreads: false,
+  workingShelf: false,
 };
 
 function thread(
@@ -4441,6 +4442,61 @@ describe("parking threads", () => {
     expect(isCompact("Asking parent")).toBe(false);
     expect(isCompact("Done parent")).toBe(false);
   });
+
+  it.each([true, false])(
+    "moves threads with work running under them to a Working shelf (enabled %s)",
+    async (workingShelf) => {
+      renderSlot(inbox, listProps, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "busy", title: "Busy work", indicator: "runtime" }),
+            thread({ id: "waiting", title: "Waiting on child" }),
+            thread({ id: "child", parentThreadId: "waiting", title: "Child work", indicator: "runtime" }),
+            thread({ id: "asking", title: "Asking parent", hasPendingInteraction: true }),
+            thread({ id: "asking-child", parentThreadId: "asking", title: "Asking child", indicator: "runtime" }),
+            thread({ id: "done", title: "Done work", indicator: "unread-success", isUnread: true }),
+            thread({ id: "pinned", title: "Pinned busy", indicator: "runtime", isPinned: true }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+        },
+        rpc: {
+          getSidebarSettings: () => ({
+            ...defaultSidebarSettings,
+            inactiveThreadsEnabled: false,
+            workingShelf,
+          }),
+          listLifecycle: () => ({ rows: [] }),
+        },
+      });
+      await screen.findByRole("link", { name: "Busy work" });
+      const titlesIn = (name: string) =>
+        within(screen.getByRole("region", { name }))
+          .getAllByRole("link")
+          .map((link) => link.getAttribute("aria-label"));
+
+      if (!workingShelf) {
+        await waitFor(() => expect(titlesIn("Active")).toContain("Busy work"));
+        expect(screen.queryByRole("region", { name: "Working" })).toBeNull();
+        return;
+      }
+      await waitFor(() =>
+        expect(titlesIn("Working")).toEqual(["Busy work", "Waiting on child"]),
+      );
+      // Done, or needing you, is Active's business; pinned stays pinned.
+      expect(titlesIn("Active")).toEqual(["Asking parent", "Done work"]);
+      expect(titlesIn("Pinned")).toEqual(["Pinned busy"]);
+      // Placement only: with compact mode off, the shelf keeps full cards.
+      for (const title of ["Busy work", "Waiting on child"]) {
+        expect(
+          screen
+            .getByRole("link", { name: title })
+            .closest("[data-parent-card]")!
+            .classList.contains("h-8"),
+        ).toBe(false);
+      }
+    },
+  );
 
   it("snoozes to a picked date and time from the snooze menu", async () => {
     const snooze = vi.fn(() => ({ ok: true }));

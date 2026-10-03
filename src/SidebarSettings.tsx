@@ -69,6 +69,7 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   childSortDirection: "Child threads",
   childIconStyle: "Child threads",
   compactWorkingThreads: "Experimental",
+  workingShelf: "Experimental",
 };
 
 /**
@@ -446,6 +447,17 @@ export function SidebarSettings() {
               label="Compact working threads"
               checked={draft.compactWorkingThreads}
               onChange={(checked) => update("compactWorkingThreads", checked)}
+            />
+          }
+        />
+        <SettingRow
+          title="Working shelf"
+          description="Move a thread that is working, or has work running under it, out of Active into its own shelf below. It returns to its place in Active when all of it is done, or when it fails or needs you. Pinned threads stay pinned. Turn on Compact working threads as well to show them as one line."
+          control={
+            <Switch
+              label="Working shelf"
+              checked={draft.workingShelf}
+              onChange={(checked) => update("workingShelf", checked)}
             />
           }
         />
