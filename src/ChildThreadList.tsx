@@ -1,5 +1,8 @@
 import { useId, useState } from "react";
-import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import {
+  experimental_useSidebarThreadSplit,
+  type PluginSidebarThread,
+} from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
 import { Disc } from "./Disc";
@@ -428,6 +431,7 @@ function ChildThreadRow({
     effectiveNow,
   );
   const [isRenaming, setIsRenaming] = useState(false);
+  const { splitProps } = experimental_useSidebarThreadSplit(thread.id);
   const RowAction = isRenaming ? "div" : "button";
 
   return (
@@ -473,10 +477,17 @@ function ChildThreadRow({
                 : childThreadOpenLabel(relation, title, visibleStatus)
             }
             aria-current={isActive && !isRenaming ? "page" : undefined}
+            draggable={false}
+            onPointerDown={isRenaming ? undefined : splitProps.onPointerDown}
             onClick={isRenaming ? undefined : () => onOpenThread(thread.id)}
             onKeyDown={isRenaming ? (event) => event.stopPropagation() : undefined}
             className={cn(
               "flex min-w-0 flex-1 items-center text-left outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              isRenaming
+                ? "cursor-auto"
+                : splitProps.onPointerDown
+                  ? "cursor-grab active:cursor-grabbing"
+                  : "cursor-pointer",
               variant === "header"
                 ? "gap-2 rounded-md px-2 py-1.5"
                 : "h-full gap-2 rounded-md pl-2",

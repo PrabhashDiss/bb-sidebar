@@ -179,6 +179,8 @@ describe("SubagentsChip", () => {
     };
     let input = await startRename();
     expect(input.closest("button")).toBeNull();
+    fireEvent.pointerDown(input, { button: 0 });
+    expect(rendered.sidebarActionCalls).toEqual([]);
     fireEvent.change(input, { target: { value: "Canceled" } });
     fireEvent.keyDown(input, { key: "Escape" });
     expect(screen.getByRole("region", { name: "Child threads" })).toBeTruthy();
@@ -190,6 +192,31 @@ describe("SubagentsChip", () => {
     await waitFor(() => expect(rendered.sidebarActionCalls).toEqual([
       { method: "rename", threadId: targetId, title: "Renamed child" },
     ]));
+  });
+
+  // The SDK test runtime logs open on pointerdown. These assertions verify
+  // source binding/ID only, not actual host drop timing or mention insertion.
+  it("binds header child and grandchild sources without binding disclosure", () => {
+    const rendered = renderSlot(childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      { sidebarThreads: { status: "ready", projects: [], threads: [
+        thread({ id: "parent", title: "Parent" }),
+        thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+        thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
+      ] } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+    const disclosure = screen.getByRole("button", { name: "Show 1 grandchild thread for Child" });
+    fireEvent.pointerDown(disclosure, { button: 0 });
+    expect(rendered.sidebarActionCalls).toEqual([]);
+    fireEvent.click(disclosure);
+    for (const [relation, title, id] of [["child", "Child", "child"], ["grandchild", "Grandchild", "grandchild"]]) {
+      const source = screen.getByRole("button", { name: `Open ${relation} thread: ${title}` });
+      expect(source.draggable).toBe(false);
+      fireEvent.pointerDown(source, { button: 0 });
+      expect(rendered.sidebarActionCalls.at(-1)).toEqual({ method: "open", threadId: id });
+    }
+    expect(rendered.sidebarActionCalls).toHaveLength(2);
   });
 
   it("mounts the shared child list in the header menu", () => {

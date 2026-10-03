@@ -199,6 +199,55 @@ it("shows direct subthreads in the hover card and opens them by keyboard or clic
   expect(screen.queryByRole("dialog", { name: "Thread details" })).toBeNull();
 });
 
+// SDK fake pointerdown is a source-binding probe, not a completed drop.
+it("binds hover subthread sources only to their open buttons", async () => {
+  const rendered = render([
+    thread({ id: "parent", title: "Parent" }),
+    thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+  ]);
+  act(() => screen.getByRole("link", { name: "Parent" }).focus());
+  const details = await screen.findByRole("dialog", { name: "Thread details" });
+  const toggle = within(details).getByRole("button", { name: "Subthreads (1)" });
+  fireEvent.pointerDown(toggle, { button: 0 });
+  expect(rendered.sidebarActionCalls).toEqual([]);
+  fireEvent.click(toggle);
+  const source = within(details).getByRole("button", { name: "Open subthread: Child" });
+  expect(source.draggable).toBe(false);
+  fireEvent.pointerDown(source, { button: 0 });
+  expect(rendered.sidebarActionCalls).toEqual([{ method: "open", threadId: "child" }]);
+});
+
+it("binds collapsed-visible sidebar descendants without enabling parent reorder", () => {
+  const threads = [
+    thread({ id: "parent", title: "Parent", isPinned: true }),
+    thread({ id: "child", title: "Child", parentThreadId: "parent", indicator: "runtime" }),
+    thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child", indicator: "runtime" }),
+  ];
+  const before = structuredClone(threads);
+  const mutations: string[] = [];
+  const rendered = renderSlot(inbox, listProps, {
+    sidebarThreads: { status: "ready", threads, projects: [] },
+    rpc: {
+      listLifecycle: () => ({ rows: [] }),
+      reorderPinned: () => { mutations.push("reorderPinned"); return null; },
+      reorderInbox: () => { mutations.push("reorderInbox"); return null; },
+      setThreadParent: () => { mutations.push("setThreadParent"); return null; },
+    },
+  });
+  for (const [relation, title, id] of [["child", "Child", "child"], ["grandchild", "Grandchild", "grandchild"]]) {
+    const source = screen.getByRole("button", { name: new RegExp(`^Open ${relation} thread: ${title}`) });
+    expect(source.draggable).toBe(false);
+    expect(source.closest("[data-sidebar-thread-shortcut-target]")).toBeNull();
+    fireEvent.pointerDown(source, { button: 0, clientX: 20, clientY: 50, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 20, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 20, clientY: 100, pointerId: 1 });
+    expect(rendered.sidebarActionCalls.at(-1)).toEqual({ method: "open", threadId: id });
+  }
+  expect(rendered.sidebarActionCalls).toHaveLength(2);
+  expect(mutations).toEqual([]);
+  expect(threads).toEqual(before);
+});
+
 it("orders hover card subthreads by the saved child sort", async () => {
   renderSlot(inbox, listProps, {
     sidebarThreads: {

@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactElement } from "react";
 import {
   experimental_useProviders as useProviders,
+  experimental_useSidebarThreadSplit,
   experimental_useSidebarThreads as useSidebarThreads,
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   useRpc,
@@ -18,6 +19,7 @@ import { PROJECT_ICONS_CHANNEL, projectIconUrl } from "./project-icons";
 import { OpenPortDetails } from "./OpenPorts";
 import { ThreadPullRequestDetails } from "./ThreadPullRequests";
 import { compareChildThreads, useChildThreadDisplay } from "./ChildThreadDisplay";
+import { cn } from "./lib/utils";
 
 export function ThreadDetailsTooltip({
   thread,
@@ -128,33 +130,17 @@ export function ThreadDetailsTooltip({
               <Icon name={subthreadsExpanded ? "ChevronUp" : "ChevronDown"} className="ml-auto size-3 shrink-0" aria-hidden />
             </button>
             {subthreadsExpanded ? <ul id={subthreadsId} aria-label="Subthreads" className="pointer-events-auto flex max-h-[min(12rem,30dvh)] flex-col gap-1.5 overflow-y-auto">
-              {subthreads.map((child) => {
-                const childProvider = providers.find((entry) => entry.id === child.providerId);
-                const childStatus = child.hasPendingInteraction ? "Needs you" : child.indicatorLabel ?? "Idle";
-                return (
-                  <li key={child.id} className="min-w-0 pl-5">
-                    <button
-                      type="button"
-                      aria-label={`Open subthread: ${threadDisplayTitle(child)}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setOpen(false);
-                        actions.open(child.id);
-                      }}
-                      className="flex w-full min-w-0 items-start gap-2 rounded-sm text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      <ProviderGlyph providerId={child.providerId} provider={childProvider ?? null} className="mt-px size-3.5 shrink-0 [&_span]:size-3.5" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{threadDisplayTitle(child)}</span>
-                        <span className="flex items-center gap-1 text-[11px] leading-4 text-muted-foreground">
-                          <span className="truncate">{childProvider?.displayName ?? child.providerId} · {childStatus}</span>
-                          <StatusGlyph indicator={child.hasPendingInteraction ? "waiting-for-input" : child.indicator} label={null} className="size-2.5" />
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
+              {subthreads.map((child) => (
+                <li key={child.id} className="min-w-0 pl-5">
+                  <SubthreadRow
+                    thread={child}
+                    onOpen={() => {
+                      setOpen(false);
+                      actions.open(child.id);
+                    }}
+                  />
+                </li>
+              ))}
             </ul> : null}
           </div>
         ) : null}
@@ -172,6 +158,40 @@ export function ThreadDetailsTooltip({
     >
       {children}
     </ThreadHoverCard>
+  );
+}
+
+function SubthreadRow({ thread, onOpen }: { thread: PluginSidebarThread; onOpen: () => void }) {
+  const { splitProps } = experimental_useSidebarThreadSplit(thread.id);
+  const { providers } = useProviders();
+  const provider = providers.find((entry) => entry.id === thread.providerId);
+  const status = thread.hasPendingInteraction ? "Needs you" : thread.indicatorLabel ?? "Idle";
+  return (
+    <button
+      type="button"
+      aria-label={`Open subthread: ${threadDisplayTitle(thread)}`}
+      draggable={false}
+      onPointerDown={splitProps.onPointerDown}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      className={cn(
+        "flex w-full min-w-0 items-start gap-2 rounded-sm text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        splitProps.onPointerDown
+          ? "cursor-grab active:cursor-grabbing"
+          : "cursor-pointer",
+      )}
+    >
+      <ProviderGlyph providerId={thread.providerId} provider={provider ?? null} className="mt-px size-3.5 shrink-0 [&_span]:size-3.5" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{threadDisplayTitle(thread)}</span>
+        <span className="flex items-center gap-1 text-[11px] leading-4 text-muted-foreground">
+          <span className="truncate">{provider?.displayName ?? thread.providerId} · {status}</span>
+          <StatusGlyph indicator={thread.hasPendingInteraction ? "waiting-for-input" : thread.indicator} label={null} className="size-2.5" />
+        </span>
+      </span>
+    </button>
   );
 }
 
