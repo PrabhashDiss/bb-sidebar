@@ -4113,6 +4113,96 @@ describe("ThreadInbox", () => {
 });
 
 describe("parking threads", () => {
+  it("previews every Settled row and cleans only after confirmation", async () => {
+    const settledThreads = Array.from({ length: 11 }, (_, index) =>
+      thread({ id: `thr_${index}`, title: `Finished ${index}` }),
+    );
+    const previewSettledCleanup = vi.fn((input: unknown) => ({
+      token: "98bb67b5-b58b-4fc4-9a55-34e557dc8f55",
+      threads: (input as { threadIds: string[] }).threadIds.slice(0, 2).map((threadId, index) => ({
+        threadId, title: threadId, terminalCount: index === 0 ? 1 : 0, ports: index === 1 ? [3000] : [],
+      })),
+      skipped: [],
+    }));
+    const cleanSettled = vi.fn(() => ({
+      closedTerminals: 1,
+      signalledPorts: [{ threadId: "thr_1", port: 3000 }],
+      remainingPorts: [],
+      skipped: [],
+      failed: [],
+    }));
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: settledThreads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: settledThreads.map((item) => ({
+          threadId: item.id, settledAt: 200, snoozedUntil: null, snoozedAt: null,
+        })) }),
+        previewSettledCleanup,
+        cleanSettled,
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
+    await waitFor(() => expect(previewSettledCleanup).toHaveBeenCalledTimes(1));
+    expect(new Set((previewSettledCleanup.mock.calls[0]![0] as { threadIds: string[] }).threadIds)).toEqual(new Set(settledThreads.map((item) => item.id)));
+    expect(dialog.textContent).toContain("1 terminal to close · 1 listening port to stop");
+    expect(dialog.textContent).not.toContain("0 terminals");
+    expect(dialog.textContent).not.toContain("session");
+    expect(within(dialog).queryByText("thr_2")).toBeNull();
+    expect(cleanSettled).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Clean resources" }));
+    await waitFor(() => expect(cleanSettled).toHaveBeenCalledWith({ token: "98bb67b5-b58b-4fc4-9a55-34e557dc8f55" }));
+    expect(dialog.textContent).toContain("1 terminal closed · 1 port shutdown request sent");
+  });
+
+  it("shows an empty preview without a Clean confirmation button", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_empty", title: "Finished" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [{ threadId: "thr_empty", settledAt: 200, snoozedUntil: null, snoozedAt: null }] }),
+        previewSettledCleanup: () => ({ token: "98bb67b5-b58b-4fc4-9a55-34e557dc8f55", threads: [], skipped: [] }),
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
+    await waitFor(() => expect(dialog.textContent).toContain("No live terminals or thread-owned listening ports found."));
+    expect(within(dialog).queryByRole("button", { name: "Clean resources" })).toBeNull();
+  });
+
+  it("opens a thread from the Clean preview and closes the dialog", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_terminal", title: "Check this terminal" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [{ threadId: "thr_terminal", settledAt: 200, snoozedUntil: null, snoozedAt: null }] }),
+        previewSettledCleanup: () => ({
+          token: "98bb67b5-b58b-4fc4-9a55-34e557dc8f55",
+          threads: [{ threadId: "thr_terminal", title: "Check this terminal", terminalCount: 1, ports: [] }],
+          skipped: [],
+        }),
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Open thread: Check this terminal" }));
+    expect(rendered.sidebarActionCalls).toContainEqual({ method: "open", threadId: "thr_terminal" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Clean settled resources?" })).toBeNull());
+  });
+
   it("moves a settled thread to the Settled shelf", async () => {
     renderSlot(inbox, listProps, {
       sidebarThreads: {
@@ -4138,7 +4228,7 @@ describe("parking threads", () => {
     expect(within(shelf).getByText(/Settled \(1\)/)).toBeDefined();
     // Collapsed by default: parked work is out of the way, never gone.
     expect(screen.queryByText("Finished work")).toBeNull();
-    fireEvent.click(within(shelf).getByRole("button"));
+    fireEvent.click(within(shelf).getByRole("button", { expanded: false }));
     expect(within(shelf).getByText("Finished work")).toBeDefined();
     expect(
       within(shelf).getByRole("listitem").textContent,
@@ -4831,7 +4921,7 @@ describe("parking threads", () => {
     });
 
     const shelf = await screen.findByRole("region", { name: "Settled" });
-    fireEvent.click(within(shelf).getByRole("button"));
+    fireEvent.click(within(shelf).getByRole("button", { expanded: false }));
     const row = within(shelf).getByText("Settled failure").closest("li")!;
     expect(within(row).getByText("Failed").className).toContain(
       "text-[color:var(--bb-sidebar-tone-error)]",
@@ -4940,7 +5030,7 @@ describe("parking threads", () => {
       within(activeShelf).getByRole("button", { expanded: true }),
     );
     fireEvent.click(within(inactiveShelf).getByRole("button"));
-    fireEvent.click(within(settledShelf).getByRole("button"));
+    fireEvent.click(within(settledShelf).getByRole("button", { expanded: false }));
     fireEvent.click(within(snoozedShelf).getByRole("button"));
     expect(within(activeShelf).queryByText("Active work")).toBeNull();
     expect(within(inactiveShelf).getByText("Inactive work")).toBeDefined();
@@ -5093,7 +5183,7 @@ describe("parking threads", () => {
     const snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
     const settledShelf = await screen.findByRole("region", { name: "Settled" });
     fireEvent.click(within(snoozedShelf).getByRole("button"));
-    fireEvent.click(within(settledShelf).getByRole("button"));
+    fireEvent.click(within(settledShelf).getByRole("button", { expanded: false }));
     expect(
       within(snoozedShelf).getAllByRole("listitem").map((row) => row.textContent),
     ).toEqual([expect.stringContaining("Sooner wake"), expect.stringContaining("Later wake")]);
@@ -5125,7 +5215,7 @@ describe("parking threads", () => {
     });
 
     const shelf = await screen.findByRole("region", { name: "Settled" });
-    fireEvent.click(within(shelf).getByRole("button"));
+    fireEvent.click(within(shelf).getByRole("button", { expanded: false }));
     expect(within(shelf).getAllByRole("listitem")).toHaveLength(10);
     fireEvent.click(within(shelf).getByRole("button", { name: "Load 25 more" }));
     expect(within(shelf).getAllByRole("listitem")).toHaveLength(35);
@@ -5922,7 +6012,7 @@ describe("row context menu", () => {
     });
 
     const shelf = await screen.findByRole("region", { name: "Snoozed" });
-    fireEvent.click(within(shelf).getByRole("button"));
+    fireEvent.click(within(shelf).getByRole("button", { expanded: false }));
     fireEvent.click(within(shelf).getByLabelText("Wake thread now"));
     await waitFor(() =>
       expect(toastMocks.success).toHaveBeenCalledWith(
@@ -6026,7 +6116,7 @@ describe("row context menu", () => {
     );
     const settledShelf = await screen.findByRole("region", { name: "Settled" });
     const snoozedShelf = await screen.findByRole("region", { name: "Snoozed" });
-    fireEvent.click(within(settledShelf).getByRole("button"));
+    fireEvent.click(within(settledShelf).getByRole("button", { expanded: false }));
     fireEvent.click(within(snoozedShelf).getByRole("button"));
 
     fireEvent.contextMenu(within(settledShelf).getByText("Settled row"));

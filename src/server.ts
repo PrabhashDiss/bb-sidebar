@@ -5,6 +5,7 @@
 // HOST_DAEMON_PROTOCOL_VERSION bump for something only this sidebar
 // understands. Here, uninstalling the plugin removes its state with it.
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   autoSettleNeedsPullRequest,
@@ -36,7 +37,7 @@ import {
   SIDEBAR_SETTINGS_CHANNEL,
   type SidebarSettingsValues,
 } from "./sidebar-settings";
-import { configuredSnoozePresetError } from "./lifecycle";
+import { canPark, configuredSnoozePresetError, hasLiveWork, isTurnInFlight } from "./lifecycle";
 import { portSnapshotSchema } from "./open-ports";
 import { createPortDiscovery } from "./port-discovery";
 import { createThreadPortActions } from "./thread-ports";
@@ -158,6 +159,30 @@ const orderedThreadIdsSchema = z
     }
   });
 const threadIdsSchema = orderedThreadIdsSchema.min(1);
+const cleanupIssueSchema = z.object({
+  threadId: z.string(),
+  resource: z.enum(["thread", "terminal", "port"]),
+  message: z.string(),
+});
+const cleanupPreviewSchema = z.object({
+  token: z.string(),
+  threads: z.array(z.object({
+    threadId: z.string(),
+    title: z.string(),
+    terminalCount: z.number().int().nonnegative(),
+    ports: z.array(z.number().int()),
+  })),
+  skipped: z.array(cleanupIssueSchema),
+});
+const cleanupResultSchema = z.object({
+  closedTerminals: z.number().int().nonnegative(),
+  signalledPorts: z.array(z.object({ threadId: z.string(), port: z.number().int() })),
+  remainingPorts: z.array(z.object({ threadId: z.string(), port: z.number().int() })),
+  skipped: z.array(cleanupIssueSchema),
+  failed: z.array(cleanupIssueSchema),
+});
+export type SettledCleanupPreview = z.infer<typeof cleanupPreviewSchema>;
+export type SettledCleanupResult = z.infer<typeof cleanupResultSchema>;
 const projectIdSchema = z.string().trim().min(1);
 const projectIconPathSchema = z
   .string()
@@ -216,6 +241,14 @@ export const bbSidebarRpcContract = defineRpcContract({
   closeThreadPorts: {
     input: threadIdSchema.extend({ ports: z.array(ownedPortTargetSchema).min(1).max(1000) }),
     output: closePortsResultSchema,
+  },
+  previewSettledCleanup: {
+    input: z.object({ threadIds: threadIdsSchema }).strict(),
+    output: cleanupPreviewSchema,
+  },
+  cleanSettled: {
+    input: z.object({ token: z.string().uuid() }).strict(),
+    output: cleanupResultSchema,
   },
   stopWorkspacePort: {
     input: threadIdSchema.extend({ port: ownedPortTargetSchema }).strict(),
@@ -999,7 +1032,7 @@ export default async function plugin(bb: BbPluginApi) {
   // work the sidebar checks (workflows, background commands, plan mode, goals,
   // a pending interaction, queued messages). One unpaged request covers the
   // same unarchived, visible threads the old paged thread list did.
-  const loadPolicyThreads = async () => {
+  const loadPolicyThreads = async (includeHidden = false) => {
     const projects = await bb.sdk.projects.list({
       include: "threads",
       includePersonal: true,
@@ -1010,11 +1043,59 @@ export default async function plugin(bb: BbPluginApi) {
             (thread) =>
               thread.archivedAt === null &&
               thread.deletedAt === null &&
-              thread.visibility === "visible",
+              (includeHidden || thread.visibility === "visible"),
           )
         : [],
     );
   };
+
+  type CleanupThread = Awaited<ReturnType<typeof loadPolicyThreads>>[number];
+  type CleanupIssue = z.infer<typeof cleanupIssueSchema>;
+  type CleanupPlanThread = {
+    threadId: string;
+    terminalIds: string[];
+    ports: Array<z.infer<typeof ownedPortTargetSchema>>;
+  };
+  const cleanupPlans = new Map<string, { expiresAt: number; threads: CleanupPlanThread[] }>();
+  bb.onDispose(() => cleanupPlans.clear());
+
+  const canCleanSettledThread = (thread: CleanupThread, row: StoredLifecycleRow | null) => {
+    if (!row || thread.visibility !== "visible" || row.settledAt === null || row.parkedAt != null ||
+        row.snoozedUntil !== null || thread.pinnedAt !== null ||
+        thread.latestAttentionAt > row.settledAt) return false;
+    const activity = thread.activity;
+    return canPark({
+      hasPendingInteraction: thread.hasPendingInteraction,
+      hasQueuedWork: thread.queuedWork !== "none",
+      isWorking: hasLiveWork({
+        workflows: activity.activeWorkflowCount,
+        backgroundAgents: activity.activeBackgroundAgentCount,
+        backgroundCommands: activity.activeBackgroundCommandCount,
+        planMode: activity.activePlanModeCount,
+        goals: activity.activeGoalCount,
+      }, isTurnInFlight(thread.status)),
+    });
+  };
+  const workspaceKeys = (thread: CleanupThread): string[] => {
+    if (!thread.environmentId) return [];
+    return [
+      `environment:${thread.environmentId}`,
+      ...(thread.environmentHostId && thread.environmentPath
+        ? [`path:${thread.environmentHostId}\0${thread.environmentPath}`]
+        : []),
+    ];
+  };
+  const cleanupContext = async () => {
+    const threads = await loadPolicyThreads(true);
+    const byId = new Map(threads.map((thread) => [thread.id, thread] as const));
+    const protectedWorkspaces = new Set(threads.flatMap((thread) => {
+      if (canCleanSettledThread(thread, readOne(thread.id))) return [];
+      return workspaceKeys(thread);
+    }));
+    return { byId, protectedWorkspaces };
+  };
+  const cleanupError = (error: unknown): string =>
+    error instanceof Error && error.message.trim() ? error.message : String(error);
 
   const loadPullRequests = async (environmentIds: readonly string[]) => {
     const results = new Map<string, AutoSettlePullRequest>();
@@ -1248,6 +1329,131 @@ export default async function plugin(bb: BbPluginApi) {
     getOpenPorts,
     getThreadPorts: threadPortActions.getThreadPorts,
     getThreadPullRequests: threadPullRequests.getThreadPullRequests,
+    async previewSettledCleanup({ threadIds }) {
+      const { byId, protectedWorkspaces } = await cleanupContext();
+      const threads: z.infer<typeof cleanupPreviewSchema>["threads"] = [];
+      const skipped: CleanupIssue[] = [];
+      const planned: CleanupPlanThread[] = [];
+      const work = await runThreadTasks(threadIds, async (threadId) => {
+        const thread = byId.get(threadId);
+        if (!thread || !canCleanSettledThread(thread, readOne(threadId))) {
+          skipped.push({ threadId, resource: "thread", message: "Thread is no longer in Settled or has active work" });
+          return;
+        }
+        const terminalIds: string[] = [];
+        try {
+          const { sessions } = await bb.sdk.terminals.list({ scope: { kind: "thread", threadId } });
+          terminalIds.push(...sessions.filter((session) =>
+            session.threadId === threadId &&
+            (session.status === "running" || session.status === "starting"),
+          ).map((session) => session.id));
+        } catch (error) {
+          skipped.push({ threadId, resource: "terminal", message: `Could not inspect terminals: ${cleanupError(error)}` });
+        }
+        const sharedWorkspace = workspaceKeys(thread).some((key) => protectedWorkspaces.has(key));
+        let ports: CleanupPlanThread["ports"] = [];
+        if (!sharedWorkspace) {
+          try {
+            ports = (await threadPortActions.getThreadPorts({ threadId })).ports;
+          } catch (error) {
+            skipped.push({ threadId, resource: "port", message: `Could not inspect ports: ${cleanupError(error)}` });
+          }
+        }
+        if (terminalIds.length > 0 || ports.length > 0) {
+          planned.push({ threadId, terminalIds, ports });
+          threads.push({
+            threadId,
+            title: thread.title ?? thread.titleFallback ?? threadId,
+            terminalCount: terminalIds.length,
+            ports: [...new Set(ports.map((port) => port.port))],
+          });
+        }
+      }, 4);
+      skipped.push(...work.failures.map(({ threadId, error }) => ({ threadId, resource: "thread" as const, message: error })));
+      const token = randomUUID();
+      const now = Date.now();
+      for (const [oldToken, plan] of cleanupPlans) if (plan.expiresAt <= now) cleanupPlans.delete(oldToken);
+      cleanupPlans.set(token, { expiresAt: now + 2 * 60_000, threads: planned });
+      const order = new Map(threadIds.map((id, index) => [id, index]));
+      threads.sort((a, b) => order.get(a.threadId)! - order.get(b.threadId)!);
+      return { token, threads, skipped };
+    },
+    async cleanSettled({ token }) {
+      const plan = cleanupPlans.get(token);
+      cleanupPlans.delete(token);
+      if (!plan || plan.expiresAt <= Date.now()) throw new Error("Cleanup preview expired. Review the resources again.");
+      const result: z.infer<typeof cleanupResultSchema> = {
+        closedTerminals: 0,
+        signalledPorts: [],
+        remainingPorts: [],
+        skipped: [],
+        failed: [],
+      };
+      const plannedById = new Map(plan.threads.map((thread) => [thread.threadId, thread]));
+      const work = await runThreadTasks(plan.threads.map((thread) => thread.threadId), async (threadId) => {
+        const { byId } = await cleanupContext();
+        const thread = byId.get(threadId);
+        if (!thread || !canCleanSettledThread(thread, readOne(threadId))) {
+          result.skipped.push({ threadId, resource: "thread", message: "Thread returned to Active or Working" });
+          return;
+        }
+        const plannedThread = plannedById.get(threadId)!;
+        if (plannedThread.terminalIds.length > 0) {
+          try {
+            const { sessions } = await bb.sdk.terminals.list({ scope: { kind: "thread", threadId } });
+            const current = new Map(sessions.map((session) => [session.id, session]));
+            for (const terminalId of plannedThread.terminalIds) {
+              const session = current.get(terminalId);
+              if (!session || session.threadId !== threadId ||
+                  (session.status !== "running" && session.status !== "starting")) {
+                result.skipped.push({ threadId, resource: "terminal", message: `Terminal ${terminalId} is no longer owned by this settled thread` });
+                continue;
+              }
+              try {
+                await bb.sdk.terminals.close({ terminalId, mode: "force" });
+                result.closedTerminals += 1;
+              } catch (error) {
+                result.failed.push({ threadId, resource: "terminal", message: `Terminal ${terminalId}: ${cleanupError(error)}` });
+              }
+            }
+          } catch (error) {
+            result.failed.push({ threadId, resource: "terminal", message: `Could not recheck terminals: ${cleanupError(error)}` });
+          }
+        }
+        if (plannedThread.ports.length === 0) return;
+        try {
+          const current = await threadPortActions.getThreadPorts({ threadId });
+          const targets = plannedThread.ports.filter((target) => current.ports.some((port) =>
+            port.pid === target.pid && port.port === target.port,
+          ));
+          if (targets.length < plannedThread.ports.length) {
+            result.skipped.push({ threadId, resource: "port", message: "Some previewed ports changed ownership or closed" });
+          }
+          if (targets.length === 0) return;
+          const beforeSignal = await cleanupContext();
+          const signalThread = beforeSignal.byId.get(threadId);
+          if (!signalThread || !canCleanSettledThread(signalThread, readOne(threadId)) ||
+              workspaceKeys(signalThread).some((key) => beforeSignal.protectedWorkspaces.has(key))) {
+            result.skipped.push({ threadId, resource: "port", message: "Thread or shared workspace became active before shutdown" });
+            return;
+          }
+          const closed = await threadPortActions.closeThreadPorts({ threadId, ports: targets });
+          result.signalledPorts.push(...closed.signalled.map((port) => ({ threadId, port })));
+          result.skipped.push(...closed.skipped.map((port) => ({ threadId, resource: "port" as const, message: `Port :${port} changed before shutdown` })));
+          result.failed.push(...closed.failed.map((port) => ({ threadId, resource: "port" as const, message: `Could not signal port :${port}` })));
+          if (closed.signalled.length > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 750));
+            const after = await threadPortActions.getThreadPorts({ threadId });
+            result.remainingPorts.push(...after.ports.filter((port) => closed.signalled.includes(port.port)).map((port) => ({ threadId, port: port.port })));
+          }
+        } catch (error) {
+          result.failed.push({ threadId, resource: "port", message: cleanupError(error) });
+        }
+      }, 4);
+      result.failed.push(...work.failures.map(({ threadId, error }) => ({ threadId, resource: "thread" as const, message: error })));
+      getOpenPorts.invalidate();
+      return result;
+    },
     async closeThreadPorts(input) {
       if (readOne(input.threadId)?.settledOverride !== "settled") {
         throw new Error("Thread is no longer settled");

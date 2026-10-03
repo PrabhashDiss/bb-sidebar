@@ -18,6 +18,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Expandable child-thread indicators with running and attention states
 - Live status, branch, pull request, and provider details
 - Workspace port discovery, hover-card details, and optional browser links
+- A Clean button in Settled that previews and closes live terminals and verified thread-owned listening ports, while protecting Active and Working threads
 - Configurable inactive-thread and automatic cleanup rules
 - Native bb navigation, split, rename, archive, and delete flows
 - Project submenu on thread cards for settings, rename, local paths, and removal

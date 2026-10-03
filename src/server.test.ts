@@ -9,6 +9,7 @@ import plugin, { type StoredLifecycleRow } from "./server";
 interface LifecycleListResult {
   rows: StoredLifecycleRow[];
 }
+type Environment = Awaited<ReturnType<BbPluginApi["sdk"]["environments"]["get"]>>;
 
 const disposers: Array<() => Promise<void>> = [];
 
@@ -184,6 +185,110 @@ async function loadPlugin(
 }
 
 describe("lifecycle RPC", () => {
+  it("previews settled resources and skips a thread that becomes active before cleaning", async () => {
+    let laterActive = false;
+    const settled = projectThread({ id: "thr_settled", environmentId: "env_shared", environmentHostId: "host_1", environmentPath: "/workspace/shared" });
+    const active = projectThread({ id: "thr_active", environmentId: "env_shared", environmentHostId: "host_1", environmentPath: "/workspace/shared", status: "active" });
+    const empty = projectThread({ id: "thr_empty" });
+    const later = () => projectThread({ id: "thr_later", status: laterActive ? "active" : "idle" });
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      sdk: {
+        projects: { list: async () => projectsWith([settled, active, empty, later()]) },
+        threads: {
+          list: async () => [],
+          get: async ({ threadId }) => makeThreadResponse({ id: threadId }),
+          unpin: async ({ threadId }) => makeThreadResponse({ id: threadId }),
+          stop: async () => ({ ok: true as const }),
+        },
+        terminals: {
+          list: async ({ scope }) => ({ sessions: scope.threadId === "thr_empty" ? [] : [{
+            ...terminalSession({ id: `term_${scope.threadId}`, lastUserInputAt: 5 }),
+            threadId: scope.threadId,
+          }] }),
+          close: async ({ terminalId }) => terminalSession({ id: terminalId, status: "exited" }),
+        },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+    await harness.behavior.callRpc("settle", { threadId: "thr_settled" });
+    await harness.behavior.callRpc("settle", { threadId: "thr_later" });
+    await harness.behavior.callRpc("settle", { threadId: "thr_empty" });
+
+    const preview = await harness.behavior.callRpc("previewSettledCleanup", {
+      threadIds: ["thr_settled", "thr_later", "thr_active", "thr_empty"],
+    }) as { token: string; threads: Array<{ threadId: string; terminalCount: number; ports: number[] }>; skipped: Array<{ threadId: string }> };
+    expect(preview.threads).toEqual([
+      expect.objectContaining({ threadId: "thr_settled", terminalCount: 1, ports: [] }),
+      expect.objectContaining({ threadId: "thr_later", terminalCount: 1, ports: [] }),
+    ]);
+    expect(preview.skipped).toEqual([expect.objectContaining({ threadId: "thr_active" })]);
+    const stopsBefore = harness.inspection.sdk.callsTo("threads.stop").length;
+    laterActive = true;
+    const result = await harness.behavior.callRpc("cleanSettled", { token: preview.token });
+    expect(result).toMatchObject({
+      closedTerminals: 1,
+      signalledPorts: [],
+      skipped: [expect.objectContaining({ threadId: "thr_later", resource: "thread" })],
+    });
+    expect(harness.inspection.sdk.callsTo("threads.stop").slice(stopsBefore)).toEqual([]);
+    expect(harness.inspection.sdk.callsTo("terminals.close")).toEqual([[{ terminalId: "term_thr_settled", mode: "force" }]]);
+    await expect(harness.behavior.callRpc("cleanSettled", { token: preview.token })).rejects.toThrow("expired");
+  });
+
+  it("signals only previewed owned ports and rechecks shared workspaces before cleaning", async () => {
+    let portOpen = true;
+    let activeSibling = false;
+    let shutdownCalls = 0;
+    const owner = projectThread({ id: "thr_owner", environmentId: "env_one", environmentHostId: "host_1", environmentPath: "/workspace/shared" });
+    const sibling = projectThread({ id: "thr_sibling", environmentId: "env_other", environmentHostId: "host_1", environmentPath: "/workspace/shared", status: "active", visibility: "hidden" });
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "bb-sidebar",
+      experimental_callHostRpc: async ({ method }) => {
+        if (method === "scan") return { ports: portOpen ? [{ environmentId: "env_one", port: 3000, pid: 45, source: "process", ownerThreadId: "thr_owner" }] : [] };
+        if (method === "closeOwnedPorts") {
+          shutdownCalls += 1;
+          portOpen = false;
+          return { signalled: [3000], skipped: [], failed: [] };
+        }
+        throw new Error(`Unexpected host call: ${method}`);
+      },
+      sdk: {
+        projects: { list: async () => projectsWith(activeSibling ? [owner, sibling] : [owner]) },
+        threads: {
+          list: async () => [],
+          get: async () => makeThreadResponse({ id: "thr_owner", environmentId: "env_one" }),
+          unpin: async () => makeThreadResponse({ id: "thr_owner" }),
+          stop: async () => ({ ok: true as const }),
+        },
+        environments: {
+          get: async () => ({ id: "env_one", hostId: "host_1", path: "/workspace/shared", status: "ready" }) as Environment,
+        },
+        terminals: { list: async () => ({ sessions: [] }) },
+      },
+    });
+    await plugin(bb);
+    disposers.push(() => harness.lifecycle.dispose());
+    await harness.behavior.callRpc("settle", { threadId: "thr_owner" });
+
+    const first = await harness.behavior.callRpc("previewSettledCleanup", { threadIds: ["thr_owner"] }) as { token: string; threads: Array<{ ports: number[] }> };
+    expect(first.threads[0]?.ports).toEqual([3000]);
+    const firstResult = await harness.behavior.callRpc("cleanSettled", { token: first.token });
+    expect(firstResult).toMatchObject({ signalledPorts: [{ threadId: "thr_owner", port: 3000 }], remainingPorts: [] });
+    expect(shutdownCalls).toBe(1);
+
+    portOpen = true;
+    const second = await harness.behavior.callRpc("previewSettledCleanup", { threadIds: ["thr_owner"] }) as { token: string };
+    activeSibling = true;
+    const secondResult = await harness.behavior.callRpc("cleanSettled", { token: second.token });
+    expect(secondResult).toMatchObject({
+      signalledPorts: [],
+      skipped: [expect.objectContaining({ threadId: "thr_owner", resource: "port" })],
+    });
+    expect(shutdownCalls).toBe(1);
+  });
+
   it("returns no ports when no threads have environments", async () => {
     const harness = await loadPlugin();
     await expect(harness.behavior.callRpc("getOpenPorts", {})).resolves.toEqual({

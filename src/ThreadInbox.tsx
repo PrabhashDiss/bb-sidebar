@@ -31,6 +31,7 @@ import { ProjectScopeSelect } from "./ProjectScopeSelect";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
+import { CleanSettledDialog } from "./CleanSettledDialog";
 import { SearchResults } from "./SearchResults";
 import { childThreadsByParent } from "./ChildThreadList";
 import {
@@ -1527,6 +1528,7 @@ export function ThreadInbox({
                     <CollapsibleShelf
                       label="Working"
                       icon="Loading"
+                      animateIcon
                       count={working.length}
                       expanded={expandedShelves.working}
                       onToggle={() =>
@@ -1797,6 +1799,7 @@ function CompactShelf({
       count={threads.length}
       expanded={expanded}
       onToggle={onToggle}
+      action={shelf === "settled" ? <CleanSettledDialog threadIds={threads.map((thread) => thread.id)} /> : undefined}
     >
       <ul ref={attachListAutoAnimateRef} className="flex flex-col gap-px">
         {visibleThreads.map((thread) => (
@@ -1888,6 +1891,7 @@ function DockableShelves({
 function CollapsibleShelf({
   label,
   icon,
+  animateIcon = false,
   count,
   expanded,
   onToggle,
@@ -1896,6 +1900,7 @@ function CollapsibleShelf({
 }: {
   label: string;
   icon: IconName;
+  animateIcon?: boolean;
   count: number;
   expanded: boolean;
   onToggle: () => void;
@@ -1914,7 +1919,11 @@ function CollapsibleShelf({
           className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
         >
           <span className="flex shrink-0 items-center gap-1.5 text-2xs font-medium text-muted-foreground/70">
-            <Icon name={icon} className="size-3.5 shrink-0" aria-hidden />
+            <Icon
+              name={icon}
+              className={cn("size-3.5 shrink-0", animateIcon && "animate-spin motion-reduce:animate-none")}
+              aria-hidden
+            />
             {expanded ? label : `${label} (${count})`}
           </span>
           <span className="h-px flex-1 bg-sidebar-border" />
