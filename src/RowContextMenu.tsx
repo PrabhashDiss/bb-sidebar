@@ -99,11 +99,17 @@ export function RowContextMenu({
       finishTitleGeneration(thread.id);
     }
   };
+  const hasPinLifecycleItems = !!(
+    thread.isPinned || thread.parentThreadId == null ||
+    onPark || onResume || onSettle || onUnsettle || onWake ||
+    (canSnooze && onSnooze && snoozePresets.length > 0)
+  );
   const togglePin = async () => {
     try {
       if (thread.isPinned) {
         await actions.setPinned(thread.id, false);
       } else {
+        if (thread.parentThreadId != null) return;
         await rpc.call("pin", { threadId: thread.id });
       }
     } catch (error) {
@@ -154,10 +160,12 @@ export function RowContextMenu({
               </ContextMenu.Portal>
             </ContextMenu.Sub>
           ) : null}
-          <Separator />
-          <Item icon={thread.isPinned ? "PinOff" : "Pin"} onSelect={() => void togglePin()}>
-            {thread.isPinned ? "Unpin" : "Pin"}
-          </Item>
+          {hasPinLifecycleItems ? <Separator /> : null}
+          {thread.isPinned || thread.parentThreadId == null ? (
+            <Item icon={thread.isPinned ? "PinOff" : "Pin"} onSelect={() => void togglePin()}>
+              {thread.isPinned ? "Unpin" : "Pin"}
+            </Item>
+          ) : null}
           {canSnooze && onSnooze && snoozePresets.length > 0 ? (
             <SnoozeSubmenu
               presets={snoozePresets}

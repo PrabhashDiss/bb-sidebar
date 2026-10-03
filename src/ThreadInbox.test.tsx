@@ -11,7 +11,7 @@ import {
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { idleSidebarThreadFields } from "./test-fixtures";
-import { DEFAULT_SNOOZE_PRESET_CONFIG, formatSnoozeWakeTime } from "./lifecycle";
+import { DEFAULT_SNOOZE_PRESET_CONFIG, formatSnoozeWakeTime, parseConfiguredSnoozePresets } from "./lifecycle";
 import { isWorkingTree } from "./working-tree";
 import type { SidebarProvider } from "./ProviderGlyph";
 
@@ -37,6 +37,13 @@ Object.defineProperty(Document.prototype, "elementFromPoint", {
 // to the test runtime; importing the component directly would bind it to an
 // empty runtime first.
 const app = await loadPluginApp(() => import("../app"));
+const { RowContextMenu } = await import("./RowContextMenu");
+function PolicyMenu({ selected, actions = {} }: {
+  selected: PluginSidebarThread;
+  actions?: Omit<Parameters<typeof RowContextMenu>[0], "thread" | "children">;
+}) {
+  return <RowContextMenu thread={selected} {...actions}><button>Policy row</button></RowContextMenu>;
+}
 const inbox = app.threadLists[0]!;
 const sidebarSettings = app.settingsSections[0]!;
 
@@ -7416,5 +7423,159 @@ describe("parent thread menu", () => {
     const { menu } = await openParentMenu(vi.fn(() => { throw new Error("Parent is no longer available"); }));
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Next parent" }));
     await waitFor(() => expect(toastMocks.error).toHaveBeenCalledWith("Could not update parent", { description: "Parent is no longer available" }));
+  });
+});
+
+
+describe("structural child pin policy UI", () => {
+  it.each(["pinned", "unpinned", "archived", "missing", "other-project"])("omits new Pin for a child with %s parent", async (parentState) => {
+    const child = thread({ id: "child", title: "Policy child", parentThreadId: "parent" });
+    const parent = thread({ id: "parent", isPinned: parentState === "pinned", isArchived: parentState === "archived", projectId: parentState === "other-project" ? "other" : "proj_1" });
+    const rendered = renderSlot({ component: PolicyMenu }, { selected: child }, {
+      sidebarThreads: { status: "ready", threads: parentState === "missing" ? [child] : [child, parent], projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }] },
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Policy row" }));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    expect(within(menu).queryByRole("menuitem", { name: "Pin" })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "Unpin" })).toBeNull();
+    expect(rendered.rpcCalls).toHaveLength(0);
+  });
+
+  it.each([null, "fork"] as const)("allows new Pin for a structural root with originKind=%s", async (originKind) => {
+    const selected = thread({ id: "root", originKind });
+    const rendered = renderSlot({ component: PolicyMenu }, { selected }, {
+      sidebarThreads: { threads: [selected] }, rpc: { pin: () => ({ ok: true }) },
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Policy row" }));
+    fireEvent.click(within(await screen.findByRole("menu", { name: "Thread actions" })).getByRole("menuitem", { name: "Pin" }));
+    await waitFor(() => expect(rendered.rpcCalls).toContainEqual({ method: "pin", input: { threadId: "root" } }));
+  });
+
+  it("keeps Unpin for an existing pinned child", async () => {
+    const selected = thread({ id: "child", parentThreadId: "missing", isPinned: true });
+    const rendered = renderSlot({ component: PolicyMenu }, { selected }, { sidebarThreads: { threads: [selected] } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Policy row" }));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    expect(within(menu).queryByRole("menuitem", { name: "Pin" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Unpin" }));
+    await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({ method: "setPinned", threadId: "child", pinned: false }));
+    expect(rendered.rpcCalls).toHaveLength(0);
+  });
+
+  it.each([false, true])("uses the same child menu policy in %s header/sidebar surface", async (header) => {
+    const children = [thread({ id: "child", title: "Nested policy child", parentThreadId: "parent", isPinned: true })];
+    const threads = [thread({ id: "parent", title: "Policy parent" }), ...children];
+    const options = { sidebarThreads: { status: "ready" as const, threads, projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }] }, rpc: { listLifecycle: () => ({ rows: [] }) } };
+    const rendered = header
+      ? renderSlot(app.threadHeaderActions.find(action => action.id === "children")!, { threadId: "parent", projectId: "proj_1", isCompactViewport: false }, options)
+      : renderSlot(inbox, listProps, options);
+    fireEvent.click(await screen.findByRole("button", { name: /1 child thread/ }));
+    fireEvent.contextMenu(await screen.findByText("Nested policy child"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    expect(within(menu).queryByRole("menuitem", { name: "Pin" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Unpin" }));
+    await waitFor(() => expect(rendered.sidebarActionCalls).toContainEqual({ method: "setPinned", threadId: "child", pinned: false }));
+  });
+
+  it.each([null, "old"])("offers enabled parent choices/hint and keyboard for pinned thread with parent=%s", async (currentParent) => {
+    const selected = thread({ id: "thread", parentThreadId: currentParent, isPinned: true });
+    const rendered = renderSlot({ component: PolicyMenu }, { selected }, {
+      sidebarThreads: { threads: [selected, thread({ id: "parent", title: "Next parent" }), thread({ id: "old", title: "Old parent" })] },
+      rpc: { setThreadParent: () => ({ ok: true }) },
+    });
+    const row = screen.getByRole("button", { name: "Policy row" });
+    fireEvent.contextMenu(row);
+    fireEvent.keyDown(within(await screen.findByRole("menu", { name: "Thread actions" })).getByRole("menuitem", { name: "Parent" }), { key: "ArrowRight" });
+    const input = await screen.findByRole("textbox", { name: "Search parent threads" });
+    const menu = input.closest<HTMLElement>('[role="menu"]')!;
+    expect(within(menu).getByText("Choosing a different parent will unpin this thread. Choosing None keeps it pinned.")).toBeDefined();
+    const choice = within(menu).getByRole("menuitemradio", { name: "Next parent" });
+    expect(choice.getAttribute("aria-disabled")).not.toBe("true");
+    expect(within(menu).getByRole("menuitemradio", { name: "None" }).getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.change(input, { target: { value: "Next" } });
+    rendered.rerender(<PolicyMenu selected={{ ...selected, isPinned: false }} />);
+    expect(screen.getByRole("button", { name: "Policy row", hidden: true })).toBe(row);
+    expect(within(menu).queryByText("Choosing a different parent will unpin this thread. Choosing None keeps it pinned.")).toBeNull();
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(choice);
+    fireEvent.keyDown(choice, { key: "Enter" });
+    await waitFor(() => expect(rendered.rpcCalls).toContainEqual({ method: "setThreadParent", input: { threadId: "thread", parentThreadId: "parent" } }));
+  });
+
+  it.each(["old", "next", null])("keeps parent choice %s available for an existing pinned child", async (parentThreadId) => {
+    const selected = thread({ id: "child", parentThreadId: "old", isPinned: true });
+    const rendered = renderSlot({ component: PolicyMenu }, { selected }, {
+      sidebarThreads: { threads: [selected, thread({ id: "old", title: "Old parent" }), thread({ id: "next", title: "Next parent" })] },
+      rpc: { setThreadParent: () => ({ ok: true }) },
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Policy row" }));
+    fireEvent.keyDown(within(await screen.findByRole("menu", { name: "Thread actions" })).getByRole("menuitem", { name: "Parent" }), { key: "ArrowRight" });
+    const input = await screen.findByRole("textbox", { name: "Search parent threads" });
+    const menu = input.closest<HTMLElement>('[role="menu"]')!;
+    expect(within(menu).getByText("Choosing a different parent will unpin this thread. Choosing None keeps it pinned.")).toBeDefined();
+    const choice = within(menu).getByRole("menuitemradio", { name: parentThreadId === "old" ? "Old parent" : parentThreadId === "next" ? "Next parent" : "None" });
+    expect(choice.getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(choice);
+    if (parentThreadId === "old") expect(rendered.rpcCalls).toHaveLength(0);
+    else await waitFor(() => expect(rendered.rpcCalls).toContainEqual({ method: "setThreadParent", input: { threadId: "child", parentThreadId } }));
+  });
+});
+
+
+describe("parent auto-unpin menu UX", () => {
+  const noop = () => {};
+  const presets = parseConfiguredSnoozePresets("1h");
+  it.each([
+    { name: "no actions", actions: {}, item: null },
+    { name: "park", actions: { onPark: noop }, item: "Park thread" },
+    { name: "resume", actions: { onResume: noop }, item: "Resume" },
+    { name: "settle", actions: { onSettle: noop }, item: "Settle" },
+    { name: "unsettle", actions: { onUnsettle: noop }, item: "Un-settle" },
+    { name: "wake", actions: { onWake: noop }, item: "Wake now" },
+    { name: "snooze without presets", actions: { canSnooze: true, onSnooze: noop, snoozePresets: [] }, item: null },
+    { name: "snooze not allowed", actions: { canSnooze: false, onSnooze: noop, snoozePresets: presets }, item: null },
+    { name: "snooze without callback", actions: { canSnooze: true, snoozePresets: presets }, item: null },
+    { name: "snooze", actions: { canSnooze: true, onSnooze: noop, snoozePresets: presets }, item: "Snooze" },
+  ])("keeps real group boundaries without adjacent separators: $name", async ({ actions, item }) => {
+    const selected = thread({ parentThreadId: "missing" });
+    renderSlot({ component: PolicyMenu }, { selected, actions }, { sidebarThreads: { threads: [selected] } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Policy row" }));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    const separators = within(menu).getAllByRole("separator");
+    expect(separators).toHaveLength(item ? 4 : 3);
+    for (const separator of separators) expect(separator.nextElementSibling?.getAttribute("role")).not.toBe("separator");
+    if (item) expect(within(menu).getByRole("menuitem", { name: item })).toBeDefined();
+  });
+
+  it("shows exactly one honest partial-success toast and suppresses duplicate selection while saving", async () => {
+    const selected = thread({ id: "thread", isPinned: true });
+    const pending = deferred<{ ok: boolean; unpinFailed: true }>();
+    const rendered = renderSlot({ component: PolicyMenu }, { selected }, {
+      sidebarThreads: { threads: [selected, thread({ id: "parent", title: "Next parent" })] },
+      rpc: { setThreadParent: () => pending.promise },
+    });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Policy row" }));
+    fireEvent.keyDown(within(await screen.findByRole("menu", { name: "Thread actions" })).getByRole("menuitem", { name: "Parent" }), { key: "ArrowRight" });
+    const input = await screen.findByRole("textbox", { name: "Search parent threads" });
+    const choice = within(input.closest<HTMLElement>('[role="menu"]')!).getByRole("menuitemradio", { name: "Next parent" });
+    fireEvent.click(choice); fireEvent.click(choice);
+    await waitFor(() => expect(rendered.rpcCalls).toHaveLength(1));
+    await act(async () => pending.resolve({ ok: true, unpinFailed: true }));
+    await waitFor(() => expect(toastMocks.error).toHaveBeenCalledExactlyOnceWith("Parent updated, but unpinning could not be confirmed", {
+      description: "If the thread is still pinned, choose Unpin manually.",
+    }));
+    expect(toastMocks.success).not.toHaveBeenCalled();
+  });
+
+  it("keeps None at a pinned root a no-op", async () => {
+    const selected = thread({ id: "thread", isPinned: true });
+    const rendered = renderSlot({ component: PolicyMenu }, { selected }, { sidebarThreads: { threads: [selected] } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Policy row" }));
+    fireEvent.keyDown(within(await screen.findByRole("menu", { name: "Thread actions" })).getByRole("menuitem", { name: "Parent" }), { key: "ArrowRight" });
+    const input = await screen.findByRole("textbox", { name: "Search parent threads" });
+    fireEvent.click(within(input.closest<HTMLElement>('[role="menu"]')!).getByRole("menuitemradio", { name: "None" }));
+    expect(rendered.rpcCalls).toHaveLength(0);
+    expect(toastMocks.success).not.toHaveBeenCalled();
+    expect(toastMocks.error).not.toHaveBeenCalled();
   });
 });

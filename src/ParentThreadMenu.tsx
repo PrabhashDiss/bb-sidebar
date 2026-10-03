@@ -64,8 +64,14 @@ export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
     inFlight.current = true;
     setSaving(true);
     try {
-      await rpc.call("setThreadParent", { threadId: thread.id, parentThreadId });
-      toast.success(parentThreadId === null ? "Parent removed" : "Parent updated");
+      const result = await rpc.call("setThreadParent", { threadId: thread.id, parentThreadId });
+      if (result.unpinFailed) {
+        toast.error("Parent updated, but unpinning could not be confirmed", {
+          description: "If the thread is still pinned, choose Unpin manually.",
+        });
+      } else {
+        toast.success(parentThreadId === null ? "Parent removed" : "Parent updated");
+      }
     } catch (error) {
       toast.error("Could not update parent", {
         description: error instanceof Error ? error.message : undefined,
@@ -109,7 +115,7 @@ export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
                 event.stopPropagation();
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                   event.preventDefault();
-                  const items = contentRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]');
+                  const items = contentRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]:not([data-disabled])');
                   const item = event.key === "ArrowDown" ? items?.[0] : items?.[items.length - 1];
                   item?.focus();
                 }
@@ -120,6 +126,11 @@ export function ParentThreadMenu({ thread }: { thread: PluginSidebarThread }) {
           <ContextMenu.Label className="px-2 py-1 text-xs text-muted-foreground">
             Assign parent thread
           </ContextMenu.Label>
+          {thread.isPinned ? (
+            <div className="px-2 py-1 text-xs text-muted-foreground">
+              Choosing a different parent will unpin this thread. Choosing None keeps it pinned.
+            </div>
+          ) : null}
           <ContextMenu.RadioGroup
             value={thread.parentThreadId ?? ""}
             onValueChange={(value) => void updateParent(value || null)}
