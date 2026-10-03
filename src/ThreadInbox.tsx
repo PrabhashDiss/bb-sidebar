@@ -1324,6 +1324,7 @@ export function ThreadInbox({
     shelf: ActiveShelfKind,
     reorderable = true,
     showProject = true,
+    compact = false,
   ) => (
     <ThreadCard
       key={thread.id}
@@ -1358,8 +1359,9 @@ export function ThreadInbox({
           : threadReorderControls(thread, shelf)
       }
       compactWhenWorking={
-        sidebarSettings?.compactWorkingThreads ??
-        DEFAULT_SIDEBAR_SETTINGS.compactWorkingThreads
+        compact ||
+        (sidebarSettings?.compactWorkingThreads ??
+          DEFAULT_SIDEBAR_SETTINGS.compactWorkingThreads)
       }
       now={now}
     />
@@ -1535,8 +1537,9 @@ export function ThreadInbox({
                       }
                     >
                       <Shelf label={null}>
+                        {/* One line, like every shelf after Active. */}
                         {visibleWorking.map((thread) =>
-                          renderActiveThread(thread, "inbox", false),
+                          renderActiveThread(thread, "inbox", false, true, true),
                         )}
                       </Shelf>
                     </CollapsibleShelf>

@@ -4487,14 +4487,14 @@ describe("parking threads", () => {
       // Done, or needing you, is Active's business; pinned stays pinned.
       expect(titlesIn("Active")).toEqual(["Asking parent", "Done work"]);
       expect(titlesIn("Pinned")).toEqual(["Pinned busy"]);
-      // Placement only: with compact mode off, the shelf keeps full cards.
+      // One line like the other shelves, even with compact mode off.
       for (const title of ["Busy work", "Waiting on child"]) {
         expect(
           screen
             .getByRole("link", { name: title })
             .closest("[data-parent-card]")!
             .classList.contains("h-8"),
-        ).toBe(false);
+        ).toBe(true);
       }
     },
   );

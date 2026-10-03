@@ -5,7 +5,7 @@
 ### Added
 
 - **Dock shelves to the bottom (experimental)**, off by default in sidebar settings. Every shelf after Active (Working, Inactive, Snoozed, Parked, Settled) rests at the bottom of the sidebar, below the space Pinned and Active leave free, as in T3 Code. An open shelf that needs more room extends the list, and everything scrolls together.
-- **Working shelf (experimental)**, off by default in sidebar settings. A thread that is working, or has work running under it (child threads, background agents, commands, workflows, goals), moves out of Active into a Working shelf right below it. Its rows follow **Compact working threads**: one line with it on, full cards with it off. It returns to its place in Active when all of it is done, or as soon as it fails or needs you. Pinned threads stay pinned, and a thread that just woke from a snooze stays in Active.
+- **Working shelf (experimental)**, off by default in sidebar settings. A thread that is working, or has work running under it (child threads, background agents, commands, workflows, goals), moves out of Active into a Working shelf right below it, shown as one line like the other shelves, whether or not **Compact working threads** is on. It returns to its place in Active when all of it is done, or as soon as it fails or needs you. Pinned threads stay pinned, and a thread that just woke from a snooze stays in Active.
 
 ### Changed
 

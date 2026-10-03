@@ -453,7 +453,7 @@ export function SidebarSettings() {
         />
         <SettingRow
           title="Working shelf"
-          description="Move a thread that is working, or has work running under it, out of Active into its own shelf below. It returns to its place in Active when all of it is done, or when it fails or needs you. Pinned threads stay pinned. Turn on Compact working threads as well to show them as one line."
+          description="Move a thread that is working, or has work running under it, out of Active into its own shelf below, shown as one line like the other shelves. It returns to its place in Active when all of it is done, or when it fails or needs you. Pinned threads stay pinned."
           control={
             <Switch
               label="Working shelf"
