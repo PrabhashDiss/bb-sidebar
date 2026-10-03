@@ -25,6 +25,8 @@ export interface SidebarSettingsValues {
   childSortField: ChildThreadSortField;
   childSortDirection: ChildThreadSortDirection;
   childIconStyle: ChildThreadIconStyle;
+  /** Experimental: fold threads with live work to one line. */
+  compactWorkingThreads: boolean;
 }
 
 import { safeSetItem } from "./lib/safe-storage";
@@ -41,6 +43,7 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   childSortField: "created",
   childSortDirection: "ascending",
   childIconStyle: "disc",
+  compactWorkingThreads: false,
 };
 
 export function childThreadSortOf(
@@ -119,6 +122,7 @@ function readStoredSidebarSettings(): SidebarSettingsValues | null {
     return {
       ...value,
       ...childThreadSettingsOf(value),
+      compactWorkingThreads: value.compactWorkingThreads === true,
     } as SidebarSettingsValues;
   } catch {
     return null;

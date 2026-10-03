@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Compact working threads (experimental)**, off by default in sidebar settings. A thread with live work shows as one line, like a settled thread, ending in a small status icon and how long it has run (◌ 6m). It returns to a full card when it finishes, fails, or needs you. Folded rows still reorder, open their child threads, and keep the right-click menu.
 - Snooze offers **Pick date & time…** below its shortcuts, in both the row's clock menu and the right-click menu. It opens a calendar and a time field, starting at tomorrow 9:00, and shows the exact wake time before you confirm. Past times and dates more than a year out cannot be picked.
 
 ### Changed

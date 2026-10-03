@@ -24,7 +24,8 @@ import { cn } from "./lib/utils";
 import { pullRequestStatusLabel, pullRequestToneClass } from "./pull-request-display";
 import { RowContextMenu } from "./RowContextMenu";
 import { ProviderGlyph, type SidebarProvider } from "./ProviderGlyph";
-import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
+import { STATUS_SLOT_CLASS, StatusOrTime, threadShortStatus } from "./StatusSlot";
+import { CompactLiveStatus } from "./StatusGlyph";
 import { threadDisplayTitle } from "./inbox";
 import { InlineThreadTitle } from "./InlineThreadTitle";
 import type { ConfiguredSnoozePreset } from "./lifecycle";
@@ -42,7 +43,8 @@ export interface ThreadReorderControls {
 
 /**
  * One thread as a three-line card: project and status, title, then branch and
- * activity. Under a shared project header the project line is dropped and the
+ * activity. With `compactWhenWorking`, a thread with live work folds to one
+ * line, like a settled row, ending in its status glyph and run time. Under a shared project header the project line is dropped and the
  * title takes its place beside the status. Status lives in the row instead of
  * its position, so manual order can stay fixed while work changes state.
  *
@@ -72,6 +74,7 @@ export function ThreadCard({
   showRunningChildrenWhenCollapsed,
   onToggleChildren,
   reorder,
+  compactWhenWorking = false,
   now,
 }: {
   thread: PluginSidebarThread;
@@ -98,6 +101,8 @@ export function ThreadCard({
   showRunningChildrenWhenCollapsed: boolean;
   onToggleChildren: () => void;
   reorder?: ThreadReorderControls;
+  /** Experimental: show threads with live work as a single line. */
+  compactWhenWorking?: boolean;
   /** Quantized clock, so every card in one render agrees on "now". */
   now: number;
 }) {
@@ -110,6 +115,10 @@ export function ThreadCard({
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
   const childListId = useId();
+  // Only work the card would label with a running duration folds; a thread
+  // that needs you, failed, or just woke keeps the full card.
+  const compact =
+    compactWhenWorking && !isWoke && threadShortStatus(thread)?.showsDuration === true;
   const emphasis = isWoke
     ? "woke"
     : thread.isUnread
@@ -187,7 +196,8 @@ export function ThreadCard({
         <div
           data-parent-card=""
           className={cn(
-            "group/card relative rounded-md px-2.5 py-2 transition-colors duration-150 ease-out motion-reduce:transition-none",
+            "group/card relative rounded-md px-2.5 transition-colors duration-150 ease-out motion-reduce:transition-none",
+            compact ? "flex h-8 items-center gap-2 text-xs" : "py-2",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
             // A thread open in another pane gets a weaker tint than the active
             // row, so the two states stay distinguishable.
@@ -240,6 +250,55 @@ export function ThreadCard({
               )}
             />
           </ThreadDetailsTooltip>
+          {compact ? (
+            <>
+              <span
+                className={cn(
+                  "pointer-events-none relative flex min-w-0 flex-1 items-center gap-1",
+                  isRenaming && "pointer-events-auto",
+                )}
+              >
+                {showProject && projectName && !isRenaming ? (
+                  <>
+                    <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
+                    <span className="max-w-[40%] shrink truncate text-muted-foreground/70">
+                      {projectName}
+                    </span>
+                    <span aria-hidden="true" className="shrink-0 text-sm leading-none text-muted-foreground/60">
+                      ·
+                    </span>
+                  </>
+                ) : null}
+                <InlineThreadTitle
+                  thread={thread}
+                  editing={isRenaming}
+                  onEditingChange={setIsRenaming}
+                  className="min-w-0 flex-1 truncate text-foreground"
+                />
+              </span>
+              <span className="pointer-events-none relative flex shrink-0 items-center gap-1.5">
+                <OpenPortsIndicator thread={thread} />
+                {childThreads.length > 0 ? (
+                  <ChildThreadBadge
+                    threads={childThreads}
+                    childrenByParent={childrenByParent}
+                    expanded={childrenExpanded}
+                    controls={childListId}
+                    onToggle={onToggleChildren}
+                  />
+                ) : null}
+                {jumpHint ? (
+                  <JumpHint label={jumpHint} />
+                ) : (
+                  <>
+                    {unpinButton}
+                    <CompactLiveStatus thread={thread} now={now} />
+                  </>
+                )}
+              </span>
+            </>
+          ) : (
+          <>
           <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
             {showProject ? (
               <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
@@ -390,6 +449,8 @@ export function ThreadCard({
               provider={provider}
             />
           </div>
+          </>
+          )}
         </div>
         {childThreads.length > 0 &&
         (childrenExpanded ||

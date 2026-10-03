@@ -92,6 +92,8 @@ const migrations = [
      ADD COLUMN child_sort_direction TEXT NOT NULL DEFAULT 'ascending'`,
   `ALTER TABLE sidebar_settings
      ADD COLUMN child_icon_style TEXT NOT NULL DEFAULT 'disc'`,
+  `ALTER TABLE sidebar_settings
+     ADD COLUMN compact_working_threads INTEGER NOT NULL DEFAULT 0`,
 ];
 
 export interface StoredLifecycleRow {
@@ -123,6 +125,7 @@ interface SidebarSettingsDbRow {
   child_sort_field: string;
   child_sort_direction: string;
   child_icon_style: string;
+  compact_working_threads: number;
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
@@ -177,6 +180,7 @@ const sidebarSettingsSchema = z
     childSortField: z.enum(CHILD_THREAD_SORT_FIELDS),
     childSortDirection: z.enum(CHILD_THREAD_SORT_DIRECTIONS),
     childIconStyle: z.enum(CHILD_THREAD_ICON_STYLES),
+    compactWorkingThreads: z.boolean(),
   })
   .strict();
 const uploadFilenameSchema = z
@@ -241,7 +245,8 @@ export const bbSidebarRpcContract = defineRpcContract({
     output: sidebarSettingsSchema,
   },
   updateSidebarSettings: {
-    input: sidebarSettingsSchema,
+    // A client built before a setting existed leaves it out; keep what is stored.
+    input: sidebarSettingsSchema.partial({ compactWorkingThreads: true }),
     output: sidebarSettingsSchema,
   },
   listLifecycle: {
@@ -490,7 +495,8 @@ export default async function plugin(bb: BbPluginApi) {
                 inactive_after_hours, show_running_children_when_collapsed,
                 auto_settle_inactive,
                 auto_settle_after_days, auto_settle_on_merge,
-                child_sort_field, child_sort_direction, child_icon_style
+                child_sort_field, child_sort_direction, child_icon_style,
+                compact_working_threads
            FROM sidebar_settings
           WHERE id = 1`,
       )
@@ -510,6 +516,7 @@ export default async function plugin(bb: BbPluginApi) {
             childSortDirection: row.child_sort_direction,
             childIconStyle: row.child_icon_style,
           }),
+          compactWorkingThreads: row.compact_working_threads === 1,
         }
       : { ...DEFAULT_SIDEBAR_SETTINGS };
   };
@@ -520,8 +527,9 @@ export default async function plugin(bb: BbPluginApi) {
          inactive_after_hours, show_running_children_when_collapsed,
          auto_settle_inactive,
          auto_settle_after_days, auto_settle_on_merge,
-         child_sort_field, child_sort_direction, child_icon_style
-       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         child_sort_field, child_sort_direction, child_icon_style,
+         compact_working_threads
+       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          snooze_presets = excluded.snooze_presets,
          inactive_threads_enabled = excluded.inactive_threads_enabled,
@@ -533,7 +541,8 @@ export default async function plugin(bb: BbPluginApi) {
          auto_settle_on_merge = excluded.auto_settle_on_merge,
          child_sort_field = excluded.child_sort_field,
          child_sort_direction = excluded.child_sort_direction,
-         child_icon_style = excluded.child_icon_style`,
+         child_icon_style = excluded.child_icon_style,
+         compact_working_threads = excluded.compact_working_threads`,
     ).run(
       values.snoozePresets,
       values.inactiveThreadsEnabled ? 1 : 0,
@@ -545,6 +554,7 @@ export default async function plugin(bb: BbPluginApi) {
       values.childSortField,
       values.childSortDirection,
       values.childIconStyle,
+      values.compactWorkingThreads ? 1 : 0,
     );
   };
 
@@ -598,6 +608,7 @@ export default async function plugin(bb: BbPluginApi) {
         childSortField: DEFAULT_SIDEBAR_SETTINGS.childSortField,
         childSortDirection: DEFAULT_SIDEBAR_SETTINGS.childSortDirection,
         childIconStyle: DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
+        compactWorkingThreads: DEFAULT_SIDEBAR_SETTINGS.compactWorkingThreads,
       });
       if (hasLegacyValues && migrated.success) {
         writeSidebarSettings(migrated.data);
@@ -1257,7 +1268,12 @@ export default async function plugin(bb: BbPluginApi) {
       return readSidebarSettings();
     },
     async updateSidebarSettings(values) {
-      writeSidebarSettings(values);
+      writeSidebarSettings({
+        ...values,
+        compactWorkingThreads:
+          values.compactWorkingThreads ??
+          readSidebarSettings().compactWorkingThreads,
+      });
       bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});
       void evaluatePolicies().catch((error) => {
         bb.log.error(

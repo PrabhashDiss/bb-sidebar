@@ -343,6 +343,16 @@ export function SidebarSettings() {
             }
           />
         </SettingRow>
+        <SettingRow
+          title="Compact working threads (experimental)"
+          description="Show a thread that is working as one line, like a settled thread, with a small status icon and how long it has run. It returns to a full card when it finishes, fails, or needs you."
+        >
+          <Switch
+            label="Compact working threads"
+            checked={draft.compactWorkingThreads}
+            onChange={(checked) => update("compactWorkingThreads", checked)}
+          />
+        </SettingRow>
       </SettingsGroup>
 
       <SettingsGroup

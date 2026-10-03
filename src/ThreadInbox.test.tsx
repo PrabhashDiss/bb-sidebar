@@ -57,6 +57,7 @@ const defaultSidebarSettings = {
   childSortField: "created",
   childSortDirection: "ascending",
   childIconStyle: "disc",
+  compactWorkingThreads: false,
 };
 
 function thread(
@@ -4298,6 +4299,46 @@ describe("parking threads", () => {
       }),
     );
   });
+
+  it.each([false, true])(
+    "folds working threads to one line only when the experiment is on (%s)",
+    async (compactWorkingThreads) => {
+      renderSlot(inbox, listProps, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "busy", title: "Busy work", indicator: "runtime", indicatorLabel: "Working" }),
+            thread({ id: "asking", title: "Asking work", indicator: "runtime", hasPendingInteraction: true }),
+            thread({ id: "idle", title: "Idle work" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+        },
+        rpc: {
+          // Fixture threads are old; keep them all in Active.
+          getSidebarSettings: () => ({
+            ...defaultSidebarSettings,
+            inactiveThreadsEnabled: false,
+            compactWorkingThreads,
+          }),
+          listLifecycle: () => ({ rows: [] }),
+        },
+      });
+      const card = (title: string) =>
+        screen.getByRole("link", { name: title }).closest("[data-parent-card]")!;
+      await screen.findByRole("link", { name: "Busy work" });
+
+      await waitFor(() =>
+        expect(card("Busy work").classList.contains("h-8")).toBe(compactWorkingThreads),
+      );
+      expect(card("Asking work").classList.contains("h-8")).toBe(false);
+      expect(card("Idle work").classList.contains("h-8")).toBe(false);
+      // The folded row keeps bb's spinner and the full label for screen readers.
+      expect(card("Busy work").querySelector('[data-icon="Loading"]') !== null).toBe(
+        compactWorkingThreads,
+      );
+      expect(within(card("Busy work") as HTMLElement).getByText("Working")).toBeDefined();
+    },
+  );
 
   it("snoozes to a picked date and time from the snooze menu", async () => {
     const snooze = vi.fn(() => ({ ok: true }));

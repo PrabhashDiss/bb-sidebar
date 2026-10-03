@@ -225,6 +225,7 @@ describe("lifecycle RPC", () => {
       childSortField: "created",
       childSortDirection: "ascending",
       childIconStyle: "disc",
+      compactWorkingThreads: false,
     });
     await expect(
       harness.behavior.callRpc("updateSidebarSettings", {
@@ -238,6 +239,7 @@ describe("lifecycle RPC", () => {
         childSortField: "activity",
         childSortDirection: "descending",
         childIconStyle: "provider",
+        compactWorkingThreads: true,
       }),
     ).resolves.toEqual({
       snoozePresets: "10m, 4h",
@@ -250,7 +252,23 @@ describe("lifecycle RPC", () => {
       childSortField: "activity",
       childSortDirection: "descending",
       childIconStyle: "provider",
+      compactWorkingThreads: true,
     });
+    // A client that predates the setting leaves it out and must not reset it.
+    await expect(
+      harness.behavior.callRpc("updateSidebarSettings", {
+        snoozePresets: "10m, 4h",
+        inactiveThreadsEnabled: false,
+        inactiveAfterHours: 12,
+        showRunningChildrenWhenCollapsed: false,
+        autoSettleInactive: false,
+        autoSettleAfterDays: 7,
+        autoSettleOnMerge: false,
+        childSortField: "activity",
+        childSortDirection: "descending",
+        childIconStyle: "provider",
+      }),
+    ).resolves.toMatchObject({ compactWorkingThreads: true });
     expect(harness.inspection.realtimeSignals).toContainEqual({
       channel: "sidebar-settings",
       payload: {},
@@ -329,6 +347,7 @@ describe("lifecycle RPC", () => {
       childSortField: "created",
       childSortDirection: "ascending",
       childIconStyle: "disc",
+      compactWorkingThreads: false,
     });
   });
 

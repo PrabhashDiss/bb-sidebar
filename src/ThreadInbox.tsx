@@ -1311,6 +1311,10 @@ export function ThreadInbox({
           ? undefined
           : threadReorderControls(thread, shelf)
       }
+      compactWhenWorking={
+        sidebarSettings?.compactWorkingThreads ??
+        DEFAULT_SIDEBAR_SETTINGS.compactWorkingThreads
+      }
       now={now}
     />
   );
