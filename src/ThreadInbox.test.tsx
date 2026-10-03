@@ -2871,11 +2871,15 @@ describe("ThreadInbox", () => {
       clientY: 30,
       pointerId: 1,
     });
+    const list = card.closest("ul")!;
+    expect(list.hasAttribute("data-drag-preview")).toBe(true);
+    expect(card.closest("[data-drag-visual]")).not.toBeNull();
     fireEvent.pointerUp(window, {
       clientX: 20,
       clientY: 30,
       pointerId: 1,
     });
+    expect(list.hasAttribute("data-drag-preview")).toBe(false);
     await waitFor(() =>
       expect(reorderInput).toEqual({
         threadId: "a",
@@ -2884,6 +2888,124 @@ describe("ThreadInbox", () => {
       }),
     );
   });
+
+  it.each(
+    [true, false].flatMap((pinned) =>
+      ["down", "up"].flatMap((direction) =>
+        [60, 120].map((neighbourHeight) => ({ pinned, direction, neighbourHeight })),
+      ),
+    ),
+  )("crosses the row boundary without oscillation: $pinned/$direction/$neighbourHeight", async ({ pinned, direction, neighbourHeight }) => {
+    const movingId = direction === "down" ? "a" : "b";
+    const neighbourId = movingId === "a" ? "b" : "a";
+    const finalOrder = ["b", "a"];
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "a", title: "Row A", isPinned: pinned }),
+          thread({ id: "b", title: "Row B", isPinned: pinned }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [] }),
+        listInboxOrder: () => ({ inboxThreadIds: ["a", "b"] }),
+        reorderPinned: () => ({ pinnedThreadIds: finalOrder }),
+        reorderInbox: () => ({ inboxThreadIds: finalOrder }),
+      },
+    });
+    const card = await screen.findByRole("link", { name: movingId === "a" ? "Row A" : "Row B" });
+    const list = card.closest("ul")!;
+    const rows = Array.from(list.children) as HTMLElement[];
+    const scroll = list.parentElement!;
+    let frame: FrameRequestCallback | undefined;
+    const checkScroll = direction === "down" && neighbourHeight === 120;
+    if (checkScroll) {
+      scroll.style.overflowY = "auto";
+      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 500 });
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 100 });
+      vi.spyOn(scroll, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 100, left: 0, right: 200 } as DOMRect);
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { frame = callback; return 1; });
+    }
+    const id = (row: Element) => row.querySelector<HTMLElement>("[data-sidebar-thread-id]")!.dataset.sidebarThreadId!;
+    const height = (row: Element) => id(row) === movingId ? 60 : neighbourHeight;
+    const rect = (row: Element) => {
+      const ordered = Array.from(list.children);
+      const top = ordered.slice(0, ordered.indexOf(row)).reduce((sum, r) => sum + height(r), 0) - scroll.scrollTop;
+      return { top, bottom: top + height(row), height: height(row), left: 0, right: 200, width: 200, x: 0, y: top, toJSON: () => ({}) };
+    };
+    for (const row of rows) vi.spyOn(row, "getBoundingClientRect").mockImplementation(() => rect(row));
+    vi.mocked(document.elementFromPoint).mockImplementation((_x, y) =>
+      rows.find((row) => y >= rect(row).top && y < rect(row).bottom) ?? null,
+    );
+    const neighbour = rows.find((row) => id(row) === neighbourId)!;
+    const start = rect(card.closest("li")!).top + 30;
+    const boundary = direction === "down" ? rect(neighbour).top + 1 : rect(neighbour).bottom - 1;
+    const move = (y: number) => fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: y, pointerId: 1 });
+    const order = () => Array.from(list.children).map(id);
+    fireEvent.pointerDown(card, { button: 0, clientX: 20, clientY: start, pointerId: 1 });
+    move(boundary);
+    expect(order()).toEqual(finalOrder); // Just 1px inside the neighbour, before its midpoint.
+    for (let i = 0; i < 3; i += 1) move(boundary);
+    expect(order()).toEqual(finalOrder);
+    const forward = boundary + (direction === "down" ? 1 : -1);
+    move(forward);
+    expect(order()).toEqual(finalOrder); // Tall neighbour still under cursor after the swap.
+    expect(rendered.rpcCalls.filter((call) => call.method.startsWith("reorder"))).toHaveLength(0);
+    move(boundary); // Immediate 1px reversal, with no timer or extra distance threshold.
+    expect(order()).toEqual(neighbourHeight > 60 ? ["a", "b"] : finalOrder);
+    if (neighbourHeight > 60) move(forward);
+    expect(order()).toEqual(finalOrder);
+    if (checkScroll) {
+      for (let i = 0; i < 3; i += 1) {
+        act(() => frame!(i * 16));
+        expect(order()).toEqual(finalOrder);
+      }
+      expect(scroll.scrollTop).toBeGreaterThan(0);
+    }
+    fireEvent.pointerUp(window, { clientX: 20, clientY: forward, pointerId: 1 });
+    await waitFor(() => expect(rendered.rpcCalls.filter((call) => call.method === (pinned ? "reorderPinned" : "reorderInbox"))).toHaveLength(1));
+    const saved = rendered.rpcCalls.find((call) => call.method === (pinned ? "reorderPinned" : "reorderInbox"))!;
+    expect(saved.input).toEqual(pinned
+      ? { threadId: movingId, previousThreadId: direction === "down" ? neighbourId : null, nextThreadId: direction === "up" ? neighbourId : null }
+      : { inboxThreadIds: finalOrder });
+  });
+
+  it.each(["Escape", "blur", "pointercancel", "unmount"])(
+    "cleans up the drag preview on %s without saving",
+    async (reason) => {
+      const rendered = renderSlot(inbox, listProps, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "a", title: "Pin A", isPinned: true }),
+            thread({ id: "b", title: "Pin B", isPinned: true }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      });
+      const card = await screen.findByRole("link", { name: "Pin A" });
+      const list = card.closest("ul")!;
+      const target = screen.getByText("Pin B").closest("li")!;
+      vi.mocked(document.elementFromPoint).mockReturnValue(target);
+      const previousCursor = document.body.style.cursor;
+      const previousSelect = document.body.style.userSelect;
+      fireEvent.pointerDown(card, { button: 0, clientX: 20, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { buttons: 1, clientX: 20, clientY: 30, pointerId: 1 });
+      expect(list.hasAttribute("data-drag-preview")).toBe(true);
+      if (reason === "Escape") fireEvent.keyDown(window, { key: "Escape" });
+      else if (reason === "blur") fireEvent.blur(window);
+      else if (reason === "pointercancel") fireEvent.pointerCancel(window, { pointerId: 1 });
+      else rendered.unmount();
+      expect(list.hasAttribute("data-drag-preview")).toBe(false);
+      expect(document.body.style.cursor).toBe(previousCursor);
+      expect(document.body.style.userSelect).toBe(previousSelect);
+      fireEvent.pointerUp(window, { clientX: 20, clientY: 30, pointerId: 1 });
+      expect(rendered.rpcCalls.filter((call) => call.method === "reorderPinned")).toHaveLength(0);
+    },
+  );
 
   it("cancels shelf reordering when bb takes over a split drag", async () => {
     const rendered = renderSlot(inbox, listProps, {

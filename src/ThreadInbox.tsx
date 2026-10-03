@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -39,6 +40,7 @@ import {
   useChildThreadDisplayValue,
 } from "./ChildThreadDisplay";
 import { useLifecycle, type LifecycleApi } from "./useLifecycle";
+import { createDragPreview } from "./drag-preview";
 import { usePinnedReorder } from "./usePinnedReorder";
 import { useInboxReorder } from "./useInboxReorder";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
@@ -709,6 +711,10 @@ export function ThreadInbox({
   } | null>(null);
   const dragOrderRef = useRef(dragOrder);
   dragOrderRef.current = dragOrder;
+  const dragPreviewRef = useRef<ReturnType<typeof createDragPreview> | null>(null);
+  useLayoutEffect(() => {
+    dragPreviewRef.current?.play();
+  });
   const activeReorderCancelRef = useRef<(() => void) | null>(null);
   const clickSuppressionRef = useRef<(() => void) | null>(null);
   useEffect(
@@ -1007,6 +1013,8 @@ export function ThreadInbox({
         let scrollFrame = 0;
         let pointerX = startX;
         let pointerY = startY;
+        let resolvedY = startY;
+        let reorderDirection = 0;
 
         function cleanup() {
           window.removeEventListener("pointermove", onPointerMove);
@@ -1024,6 +1032,8 @@ export function ThreadInbox({
           if (engaged) {
             document.body.style.userSelect = previousUserSelect;
             document.body.style.cursor = previousCursor;
+            dragPreviewRef.current?.destroy();
+            dragPreviewRef.current = null;
             resumeListAnimations();
           }
           if (activeReorderCancelRef.current === cancel) {
@@ -1052,6 +1062,8 @@ export function ThreadInbox({
           clickSuppressionRef.current = armClickSuppression(movingId);
           listElement = rowAnchor.closest("ul");
           scrollContainer = findScrollContainer(listElement);
+          resolvedY = startY + (scrollContainer?.scrollTop ?? 0);
+          if (listElement) dragPreviewRef.current = createDragPreview(listElement);
           const next = {
             shelf,
             movingId,
@@ -1065,6 +1077,12 @@ export function ThreadInbox({
         function reorderAt(clientX: number, clientY: number) {
           const current = dragOrderRef.current;
           if (!current || current.shelf !== shelf) return;
+          // Content coordinates include auto-scroll. Keep the last direction
+          // when the pointer is stationary: a tall neighbour can occupy the
+          // cursor after a swap, but must not swap back without a reversal.
+          const contentY = clientY + (scrollContainer?.scrollTop ?? 0);
+          if (contentY !== resolvedY) reorderDirection = Math.sign(contentY - resolvedY);
+          resolvedY = contentY;
           const visibleIds = reorderScopeRef.current(movingId, shelf).ids;
           const hit = document.elementFromPoint(clientX, clientY);
           const hitRow = hit instanceof Element ? hit.closest("li") : null;
@@ -1094,13 +1112,17 @@ export function ThreadInbox({
             visibleIds.includes(targetId) &&
             current.movingId !== targetId
           ) {
-            const rect = row.getBoundingClientRect();
-            nextIds = movePinnedId(
-              current.ids,
-              current.movingId,
-              targetId,
-              clientY < rect.top + rect.height / 2 ? "before" : "after",
+            const targetDirection = Math.sign(
+              current.ids.indexOf(targetId) - current.ids.indexOf(current.movingId),
             );
+            if (targetDirection === reorderDirection) {
+              nextIds = movePinnedId(
+                current.ids,
+                current.movingId,
+                targetId,
+                targetDirection < 0 ? "before" : "after",
+              );
+            }
           } else if (!targetId && listElement) {
             // Headers, padding and the run-off below the last row are not rows,
             // so hit-testing alone strands a drag aimed at either end of a
@@ -1110,8 +1132,8 @@ export function ThreadInbox({
             const listRect = listElement.getBoundingClientRect();
             const within =
               clientX >= listRect.left && clientX <= listRect.right;
-            const before = within && clientY < listRect.top;
-            const after = within && clientY > listRect.bottom;
+            const before = within && clientY < listRect.top && reorderDirection < 0;
+            const after = within && clientY > listRect.bottom && reorderDirection > 0;
             const edgeId = before
               ? current.ids.find((id) => id !== current.movingId)
               : after
@@ -1130,6 +1152,7 @@ export function ThreadInbox({
           }
 
           if (!nextIds || sameOrder(nextIds, current.ids)) return;
+          dragPreviewRef.current?.capture();
           const next = { ...current, ids: nextIds };
           dragOrderRef.current = next;
           setDragOrder(next);
@@ -2021,7 +2044,7 @@ function ActiveProjectGroup({
           "relative z-20 bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
       )}
     >
-      <section aria-label={`${projectName} project`}>
+      <section data-drag-visual="" aria-label={`${projectName} project`}>
         <button
           type="button"
           data-reorder-key={unitKey}

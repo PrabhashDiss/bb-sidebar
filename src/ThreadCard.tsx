@@ -247,280 +247,282 @@ export function ThreadCard({
           reorder?.isDragging && "relative z-20",
         )}
       >
-        <div
-          data-parent-card=""
-          className={cn(
-            "group/card relative rounded-md px-2.5 transition-colors duration-150 ease-out motion-reduce:transition-none",
-            compact ? "flex h-8 items-center gap-2 text-xs" : "py-2",
-            isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
-            // A thread open in another pane gets a weaker tint than the active
-            // row, so the two states stay distinguishable.
-            !isActive && layout !== null && "bg-sidebar-accent/30",
-            // Lifted, not faded: the row under the cursor is the one the user
-            // is acting on, so it should read as the most present thing on the
-            // shelf. The two stacked gradients put an opaque sidebar base under
-            // the accent tint, because a translucent row would let the rows it
-            // passes over show straight through it.
-            reorder?.isDragging &&
-              "bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
-          )}
-        >
-          <ThreadDetailsTooltip thread={thread} disabled={isRenaming || !!reorder?.isDragging}>
-            <a
-              // Both attributes, or bb's nine thread shortcuts stop finding rows.
-              data-sidebar-thread-shortcut-target=""
-              data-sidebar-thread-id={thread.id}
-              href="#"
-              aria-label={threadDisplayTitle(thread)}
-              aria-current={isActive ? "page" : undefined}
-              draggable={false}
-              aria-keyshortcuts={
-                reorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined
-              }
-              onPointerDown={(event) => {
-                splitProps.onPointerDown?.(event);
-                reorder?.onPointerDown(event);
-              }}
-              onKeyDown={reorder?.onKeyDown}
-              onClick={(event) => {
-                event.preventDefault();
-                if (isRenaming || event.detail > 1) return;
-                if (isWoke) onAcknowledgeWake();
-                actions.open(thread.id, { split: false });
-                onNavigate();
-              }}
-              onDoubleClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                changeRenaming(true);
-              }}
-              className={cn(
-                // Vertical panning stays with the scroller; this row never
-                // claims a touch gesture for reordering.
-                "absolute inset-0 touch-pan-y rounded-md",
-                reorder && !reorder.disabled
-                  ? "cursor-grab active:cursor-grabbing"
-                  : "cursor-pointer",
-              )}
-            />
-          </ThreadDetailsTooltip>
-          {compact ? (
-            <>
-              <span
-                className={cn(
-                  "pointer-events-none relative flex min-w-0 flex-1 items-center gap-1",
-                  isRenaming && "pointer-events-auto",
-                )}
-              >
-                {showProject && projectName && !isRenaming ? (
-                  <>
-                    <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
-                    <span className="max-w-[40%] shrink truncate text-muted-foreground/70">
-                      {projectName}
-                    </span>
-                    <span aria-hidden="true" className="shrink-0 text-sm leading-none text-muted-foreground/60">
-                      ·
-                    </span>
-                  </>
-                ) : null}
-                <InlineThreadTitle
-                  thread={thread}
-                  editing={isRenaming}
-                  onEditingChange={changeRenaming}
-                  className={cn(
-                    "min-w-0 flex-1 truncate text-foreground",
-                    thread.isUnread && "font-medium",
-                  )}
-                />
-              </span>
-              <span className="pointer-events-none relative flex shrink-0 items-center gap-1.5">
-                <OpenPortsIndicator thread={thread} />
-                {childThreads.length > 0 ? (
-                  <ChildThreadBadge
-                    threads={childThreads}
-                    childrenByParent={childrenByParent}
-                    expanded={childrenExpanded}
-                    controls={childListId}
-                    onToggle={onToggleChildren}
-                  />
-                ) : null}
-                {jumpHint ? (
-                  <JumpHint label={jumpHint} />
-                ) : (
-                  <>
-                    {unpinButton}
-                    {/* The parent's own run time while it works; otherwise its
-                        usual status or age, with the badge showing the
-                        children still running. */}
-                    {liveStatus ? (
-                      <CompactLiveStatus thread={thread} now={now} />
-                    ) : (
-                      <StatusOrTime thread={thread} now={now} />
-                    )}
-                  </>
-                )}
-              </span>
-            </>
-          ) : (
-          <>
-          <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
-            {showProject ? (
-              <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
-                {projectName ? (
-                  <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
-                ) : null}
-                <span className="min-w-0 truncate">{projectName ?? " "}</span>
-              </span>
-            ) : (
-              titleLine
+        <div data-drag-visual="">
+          <div
+            data-parent-card=""
+            className={cn(
+              "group/card relative rounded-md px-2.5 transition-colors duration-150 ease-out motion-reduce:transition-none",
+              compact ? "flex h-8 items-center gap-2 text-xs" : "py-2",
+              isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
+              // A thread open in another pane gets a weaker tint than the active
+              // row, so the two states stay distinguishable.
+              !isActive && layout !== null && "bg-sidebar-accent/30",
+              // Lifted, not faded: the row under the cursor is the one the user
+              // is acting on, so it should read as the most present thing on the
+              // shelf. The two stacked gradients put an opaque sidebar base under
+              // the accent tint, because a translucent row would let the rows it
+              // passes over show straight through it.
+              reorder?.isDragging &&
+                "bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
             )}
-            {/* bb's own rows trade their trailing status for the shortcut
-                while the modifier is held; these do the same. */}
-            {jumpHint ? (
-              <span className={cn(STATUS_SLOT_CLASS, "w-auto")}>
-                <JumpHint label={jumpHint} />
-              </span>
-            ) : isWoke ? (
-              <span className={cn(STATUS_SLOT_CLASS, "w-auto gap-1.5")}>
-                {unpinButton}
-                <Tooltip label="Dismiss Woke marker">
-                  <button
-                    type="button"
-                    aria-label="Dismiss Woke marker"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onAcknowledgeWake();
-                    }}
-                    className="pointer-events-auto text-2xs font-medium text-[color:var(--bb-sidebar-woke)] hover:underline"
-                  >
-                    Woke
-                  </button>
-                </Tooltip>
-                <StatusOrTime thread={thread} now={now} />
-              </span>
-            ) : (
-              <span
+          >
+            <ThreadDetailsTooltip thread={thread} disabled={isRenaming || !!reorder?.isDragging}>
+              <a
+                // Both attributes, or bb's nine thread shortcuts stop finding rows.
+                data-sidebar-thread-shortcut-target=""
+                data-sidebar-thread-id={thread.id}
+                href="#"
+                aria-label={threadDisplayTitle(thread)}
+                aria-current={isActive ? "page" : undefined}
+                draggable={false}
+                aria-keyshortcuts={
+                  reorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined
+                }
+                onPointerDown={(event) => {
+                  splitProps.onPointerDown?.(event);
+                  reorder?.onPointerDown(event);
+                }}
+                onKeyDown={reorder?.onKeyDown}
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (isRenaming || event.detail > 1) return;
+                  if (isWoke) onAcknowledgeWake();
+                  actions.open(thread.id, { split: false });
+                  onNavigate();
+                }}
+                onDoubleClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  changeRenaming(true);
+                }}
                 className={cn(
-                  STATUS_SLOT_CLASS,
-                  "group/status-slot pointer-events-auto relative h-5",
-                  showParkActions &&
-                    "[@media(hover:none)]:w-auto [@media(hover:none)]:gap-1.5",
-                  !showParkActions && "w-auto min-w-20",
-                  // Beside the title a fixed slot would cut every title short,
-                  // so it hugs the time and widens only while the actions show.
-                  !showProject && "w-auto min-w-0",
-                  !showProject &&
-                    showParkActions &&
-                    "[@media(hover:hover)]:group-hover/card:min-w-11 has-[:focus-visible]:min-w-11",
-                  !showProject && isSnoozeOpen && "min-w-11",
+                  // Vertical panning stays with the scroller; this row never
+                  // claims a touch gesture for reordering.
+                  "absolute inset-0 touch-pan-y rounded-md",
+                  reorder && !reorder.disabled
+                    ? "cursor-grab active:cursor-grabbing"
+                    : "cursor-pointer",
                 )}
-              >
+              />
+            </ThreadDetailsTooltip>
+            {compact ? (
+              <>
                 <span
                   className={cn(
-                    "flex items-center justify-end gap-0.5 transition-opacity duration-150 ease-out motion-reduce:transition-none",
-                    showParkActions &&
-                      "[@media(hover:hover)]:group-hover/card:opacity-0 [@media(hover:hover)]:group-has-[:focus-visible]/status-slot:opacity-0 [@media(hover:none)]:static [@media(hover:none)]:opacity-100",
-                    showParkActions && showProject && "absolute inset-y-0 right-0",
-                    isSnoozeOpen &&
-                      "opacity-0 [@media(hover:none)]:opacity-100",
+                    "pointer-events-none relative flex min-w-0 flex-1 items-center gap-1",
+                    isRenaming && "pointer-events-auto",
                   )}
                 >
-                  {!showParkActions ? unpinButton : null}
+                  {showProject && projectName && !isRenaming ? (
+                    <>
+                      <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
+                      <span className="max-w-[40%] shrink truncate text-muted-foreground/70">
+                        {projectName}
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-sm leading-none text-muted-foreground/60">
+                        ·
+                      </span>
+                    </>
+                  ) : null}
+                  <InlineThreadTitle
+                    thread={thread}
+                    editing={isRenaming}
+                    onEditingChange={changeRenaming}
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-foreground",
+                      thread.isUnread && "font-medium",
+                    )}
+                  />
+                </span>
+                <span className="pointer-events-none relative flex shrink-0 items-center gap-1.5">
+                  <OpenPortsIndicator thread={thread} />
+                  {childThreads.length > 0 ? (
+                    <ChildThreadBadge
+                      threads={childThreads}
+                      childrenByParent={childrenByParent}
+                      expanded={childrenExpanded}
+                      controls={childListId}
+                      onToggle={onToggleChildren}
+                    />
+                  ) : null}
+                  {jumpHint ? (
+                    <JumpHint label={jumpHint} />
+                  ) : (
+                    <>
+                      {unpinButton}
+                      {/* The parent's own run time while it works; otherwise its
+                          usual status or age, with the badge showing the
+                          children still running. */}
+                      {liveStatus ? (
+                        <CompactLiveStatus thread={thread} now={now} />
+                      ) : (
+                        <StatusOrTime thread={thread} now={now} />
+                      )}
+                    </>
+                  )}
+                </span>
+              </>
+            ) : (
+            <>
+            <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
+              {showProject ? (
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
+                  {projectName ? (
+                    <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
+                  ) : null}
+                  <span className="min-w-0 truncate">{projectName ?? " "}</span>
+                </span>
+              ) : (
+                titleLine
+              )}
+              {/* bb's own rows trade their trailing status for the shortcut
+                  while the modifier is held; these do the same. */}
+              {jumpHint ? (
+                <span className={cn(STATUS_SLOT_CLASS, "w-auto")}>
+                  <JumpHint label={jumpHint} />
+                </span>
+              ) : isWoke ? (
+                <span className={cn(STATUS_SLOT_CLASS, "w-auto gap-1.5")}>
+                  {unpinButton}
+                  <Tooltip label="Dismiss Woke marker">
+                    <button
+                      type="button"
+                      aria-label="Dismiss Woke marker"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onAcknowledgeWake();
+                      }}
+                      className="pointer-events-auto text-2xs font-medium text-[color:var(--bb-sidebar-woke)] hover:underline"
+                    >
+                      Woke
+                    </button>
+                  </Tooltip>
                   <StatusOrTime thread={thread} now={now} />
                 </span>
-                {showParkActions ? (
+              ) : (
+                <span
+                  className={cn(
+                    STATUS_SLOT_CLASS,
+                    "group/status-slot pointer-events-auto relative h-5",
+                    showParkActions &&
+                      "[@media(hover:none)]:w-auto [@media(hover:none)]:gap-1.5",
+                    !showParkActions && "w-auto min-w-20",
+                    // Beside the title a fixed slot would cut every title short,
+                    // so it hugs the time and widens only while the actions show.
+                    !showProject && "w-auto min-w-0",
+                    !showProject &&
+                      showParkActions &&
+                      "[@media(hover:hover)]:group-hover/card:min-w-11 has-[:focus-visible]:min-w-11",
+                    !showProject && isSnoozeOpen && "min-w-11",
+                  )}
+                >
                   <span
                     className={cn(
-                      "pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 motion-reduce:transition-none",
-                      isSnoozeOpen && "pointer-events-auto opacity-100",
+                      "flex items-center justify-end gap-0.5 transition-opacity duration-150 ease-out motion-reduce:transition-none",
+                      showParkActions &&
+                        "[@media(hover:hover)]:group-hover/card:opacity-0 [@media(hover:hover)]:group-has-[:focus-visible]/status-slot:opacity-0 [@media(hover:none)]:static [@media(hover:none)]:opacity-100",
+                      showParkActions && showProject && "absolute inset-y-0 right-0",
+                      isSnoozeOpen &&
+                        "opacity-0 [@media(hover:none)]:opacity-100",
                     )}
                   >
-                    {unpinButton}
-                    <SnoozeSelect
-                      label="Snooze thread"
-                      snoozePresets={snoozePresets}
-                      triggerClassName="h-5 w-5 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
-                      onOpenChange={setIsSnoozeOpen}
-                      onSnooze={onSnooze}
-                      onPark={onPark}
-                    />
-                    <ParkButton
-                      label="Settle thread"
-                      onActivate={onSettle}
-                    />
+                    {!showParkActions ? unpinButton : null}
+                    <StatusOrTime thread={thread} now={now} />
                   </span>
-                ) : null}
-              </span>
+                  {showParkActions ? (
+                    <span
+                      className={cn(
+                        "pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 motion-reduce:transition-none",
+                        isSnoozeOpen && "pointer-events-auto opacity-100",
+                      )}
+                    >
+                      {unpinButton}
+                      <SnoozeSelect
+                        label="Snooze thread"
+                        snoozePresets={snoozePresets}
+                        triggerClassName="h-5 w-5 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
+                        onOpenChange={setIsSnoozeOpen}
+                        onSnooze={onSnooze}
+                        onPark={onPark}
+                      />
+                      <ParkButton
+                        label="Settle thread"
+                        onActivate={onSettle}
+                      />
+                    </span>
+                  ) : null}
+                </span>
+              )}
+            </div>
+            {showProject ? titleLine : null}
+            <div className="pointer-events-none relative mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
+              {/* A thread without a worktree still runs somewhere, so the
+                  machine takes the branch's place rather than leaving the line
+                  blank. */}
+              <ThreadLocation thread={thread} />
+              <OpenPortsIndicator thread={thread} />
+              {childThreads.length > 0 ? (
+                <ChildThreadBadge
+                  threads={childThreads}
+                  childrenByParent={childrenByParent}
+                  expanded={childrenExpanded}
+                  controls={childListId}
+                  onToggle={onToggleChildren}
+                />
+              ) : null}
+              {thread.environment?.branchName && thread.host ? (
+                <Icon
+                  name="Computer"
+                  aria-label={`Machine: ${thread.host.name}`}
+                  className="size-3 shrink-0 text-muted-foreground/60"
+                />
+              ) : null}
+              {thread.activity.workflows > 0 ? (
+                <ActivityCount
+                  label="workflows"
+                  count={thread.activity.workflows}
+                />
+              ) : null}
+              {thread.activity.backgroundAgents > 0 ? (
+                <ActivityCount
+                  label="background agents"
+                  count={thread.activity.backgroundAgents}
+                />
+              ) : null}
+              {isVisible ? <ThreadPullRequest threadId={thread.id} /> : null}
+              <ProviderGlyph
+                providerId={thread.providerId}
+                provider={provider}
+              />
+            </div>
+            </>
             )}
           </div>
-          {showProject ? titleLine : null}
-          <div className="pointer-events-none relative mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
-            {/* A thread without a worktree still runs somewhere, so the
-                machine takes the branch's place rather than leaving the line
-                blank. */}
-            <ThreadLocation thread={thread} />
-            <OpenPortsIndicator thread={thread} />
-            {childThreads.length > 0 ? (
-              <ChildThreadBadge
-                threads={childThreads}
-                childrenByParent={childrenByParent}
-                expanded={childrenExpanded}
-                controls={childListId}
-                onToggle={onToggleChildren}
-              />
-            ) : null}
-            {thread.environment?.branchName && thread.host ? (
-              <Icon
-                name="Computer"
-                aria-label={`Machine: ${thread.host.name}`}
-                className="size-3 shrink-0 text-muted-foreground/60"
-              />
-            ) : null}
-            {thread.activity.workflows > 0 ? (
-              <ActivityCount
-                label="workflows"
-                count={thread.activity.workflows}
-              />
-            ) : null}
-            {thread.activity.backgroundAgents > 0 ? (
-              <ActivityCount
-                label="background agents"
-                count={thread.activity.backgroundAgents}
-              />
-            ) : null}
-            {isVisible ? <ThreadPullRequest threadId={thread.id} /> : null}
-            <ProviderGlyph
-              providerId={thread.providerId}
-              provider={provider}
+          {childThreads.length > 0 &&
+          (childrenExpanded ||
+            collapsedChildThreads(
+              childThreads,
+              childrenByParent,
+              activeThreadId,
+              showChildrenWhenCollapsed,
+            ).length > 0) ? (
+            <ChildThreadList
+              id={childListId}
+              threads={childThreads}
+              childrenByParent={childrenByParent}
+              activeThreadId={activeThreadId}
+              expanded={childrenExpanded}
+              showRunningChildrenWhenCollapsed={showChildrenWhenCollapsed}
+              variant="sidebar"
+              now={now}
+              onOpenThread={(childId) => {
+                actions.open(childId, { split: false });
+                onNavigate();
+              }}
             />
-          </div>
-          </>
-          )}
+          ) : null}
         </div>
-        {childThreads.length > 0 &&
-        (childrenExpanded ||
-          collapsedChildThreads(
-            childThreads,
-            childrenByParent,
-            activeThreadId,
-            showChildrenWhenCollapsed,
-          ).length > 0) ? (
-          <ChildThreadList
-            id={childListId}
-            threads={childThreads}
-            childrenByParent={childrenByParent}
-            activeThreadId={activeThreadId}
-            expanded={childrenExpanded}
-            showRunningChildrenWhenCollapsed={showChildrenWhenCollapsed}
-            variant="sidebar"
-            now={now}
-            onOpenThread={(childId) => {
-              actions.open(childId, { split: false });
-              onNavigate();
-            }}
-          />
-        ) : null}
       </li>
     </RowContextMenu>
   );
