@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+## [0.2.29] - 2026-10-03
+
 ### Added
 
-- **Clean** in the Settled header previews only live terminals and verified thread-owned listening ports before asking for confirmation. Threads with nothing to clean and zero counts stay out of the preview. Each listed thread has an Open button for inspection. Clean force-closes the listed terminals and sends graceful shutdown requests to listed port processes. Threads that return to Active or Working are skipped, as are ports in a workspace shared with another non-settled thread. The result lists completed, skipped, failed, and still-listening resources.
+- **Clean** in the Settled header previews only live terminals and verified thread-owned listening ports before asking for confirmation. Threads with nothing to clean and zero counts stay out of the preview. Each listed thread has an Open button for inspection. Clean force-closes the listed terminals and sends graceful shutdown requests to listed port processes. Threads that return to Active or Working are skipped, as are resources in a workspace shared with another non-settled thread. The result lists completed, skipped, failed, and still-listening resources.
 - **Dock shelves to the bottom (experimental)**, off by default in sidebar settings. Every shelf after Active (Working, Inactive, Snoozed, Parked, Settled) rests at the bottom of the sidebar, below the space Pinned and Active leave free, as in T3 Code. An open shelf that needs more room extends the list, and everything scrolls together.
 - **Working shelf (experimental)**, off by default in sidebar settings. A thread that is working, or has work running under it (child threads, background agents, commands, workflows, goals), moves out of Active into a Working shelf right below it, shown as one line like the other shelves, whether or not **Compact working threads** is on. It returns to its place in Active when all of it is done, or as soon as it fails or needs you. Pinned threads stay pinned, and a thread that just woke from a snooze stays in Active.
 
