@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
   experimental_useSidebarThreadSplit,
   type PluginSidebarThread,
@@ -77,27 +77,6 @@ export function childNeedsYouCount(
 }
 
 /**
- * The children a collapsed list still shows: the active child, or the child
- * whose grandchild is active. Mirrors how a collapsed shelf keeps its active
- * thread visible, so collapsing a parent never hides the open chat.
- */
-export function activeChildThreads(
-  threads: readonly PluginSidebarThread[],
-  childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
-  activeThreadId: string | null | undefined,
-): PluginSidebarThread[] {
-  if (!activeThreadId) return [];
-  return threads.filter(
-    (child) =>
-      !child.isArchived &&
-      (child.id === activeThreadId ||
-        childrenByParent
-          .get(child.id)
-          ?.some((grandchild) => grandchild.id === activeThreadId) === true),
-  );
-}
-
-/**
  * Whether a child earns a row while its section is collapsed: anything with
  * a status to report (failed, waiting on the user, finished but unread, or
  * still working). Read and idle children fold away; so does any indicator bb
@@ -108,7 +87,7 @@ export function childNeedsAttention(thread: PluginSidebarThread): boolean {
   return childStatusKind(thread) !== null;
 }
 
-/** Children retained while collapsed, including paths to visible grandchildren. */
+/** Children retained while collapsed, including paths to visible descendants. */
 export function collapsedChildThreads(
   threads: readonly PluginSidebarThread[],
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
@@ -117,16 +96,10 @@ export function collapsedChildThreads(
 ): PluginSidebarThread[] {
   return threads.filter((child) => {
     if (child.isArchived) return false;
-    const grandchildren = childrenByParent.get(child.id) ?? [];
-    return (
-      child.id === activeThreadId ||
-      grandchildren.some((grandchild) => grandchild.id === activeThreadId) ||
-      (showAttentionChildren &&
-        (childNeedsAttention(child) ||
-          grandchildren.some(
-            (grandchild) =>
-              !grandchild.isArchived && childNeedsAttention(grandchild),
-          )))
+    return childSubtree([child], childrenByParent).some(
+      (descendant) =>
+        descendant.id === activeThreadId ||
+        (showAttentionChildren && childNeedsAttention(descendant)),
     );
   });
 }
@@ -209,7 +182,7 @@ export function ChildThreadBadge({
   onToggle,
 }: {
   threads: readonly PluginSidebarThread[];
-  /** When given, grandchildren count toward the status rollup (not the count). */
+  /** When given, descendants count toward the status rollup (not the count). */
   childrenByParent?: ReadonlyMap<string, readonly PluginSidebarThread[]>;
   expanded: boolean;
   controls: string;
@@ -280,7 +253,7 @@ export function ChildThreadList({
   now?: number;
   id?: string;
   activeThreadId?: string | null;
-  /** When false, only the active child (or the child of the active grandchild) shows. */
+  /** When false, only children on the path to the active descendant show. */
   expanded?: boolean;
   /**
    * While collapsed, also keep children with something to report: failed,
@@ -299,11 +272,11 @@ export function ChildThreadList({
         activeThreadId,
         showRunningChildrenWhenCollapsed,
       );
-  const [expandedGrandchildParentIds, setExpandedGrandchildParentIds] =
+  const [expandedDescendantParentIds, setExpandedDescendantParentIds] =
     useState<ReadonlySet<string>>(() => new Set());
 
-  const toggleGrandchildren = (threadId: string) => {
-    setExpandedGrandchildParentIds((current) => {
+  const toggleDescendants = (threadId: string) => {
+    setExpandedDescendantParentIds((current) => {
       const next = new Set(current);
       if (next.has(threadId)) {
         next.delete(threadId);
@@ -313,6 +286,73 @@ export function ChildThreadList({
       return next;
     });
   };
+
+  const renderRows = (
+    siblings: readonly PluginSidebarThread[],
+    depth: number,
+    ancestors: ReadonlySet<string>,
+  ): ReactNode => siblings
+    .map((child) => {
+      const path = new Set(ancestors).add(child.id);
+      const descendants = (childrenByParent.get(child.id) ?? []).filter(
+        (thread) => !thread.isArchived && !path.has(thread.id),
+      );
+      const descendantsExpanded = expandedDescendantParentIds.has(child.id);
+      const visibleDescendants = descendantsExpanded
+        ? descendants
+        : collapsedChildThreads(
+            descendants,
+            childrenByParent,
+            activeThreadId,
+            showRunningChildrenWhenCollapsed,
+          );
+      const descendantsId = `${disclosureId}-${child.id}`;
+      const relation = depth === 1 ? "child"
+        : depth === 2 ? "grandchild"
+        : depth === 3 ? "great-grandchild" : "descendant";
+      const descendantRelation = depth === 1 ? "grandchild"
+        : depth === 2 ? "great-grandchild" : "descendant";
+      const listLabel = depth === 1 ? "Grandchildren"
+        : depth === 2 ? "Great-grandchildren" : "Descendants";
+      return (
+        <li key={child.id} className="list-none">
+          <ChildThreadRow
+            thread={child}
+            relation={relation}
+            variant={variant}
+            now={now}
+            isActive={child.id === activeThreadId}
+            onOpenThread={onOpenThread}
+            disclosure={
+              descendants.length > 0
+                ? {
+                    count: descendants.length,
+                    relation: descendantRelation,
+                    expanded: descendantsExpanded,
+                    controls: descendantsId,
+                    onToggle: () => toggleDescendants(child.id),
+                  }
+                : undefined
+            }
+          />
+          {visibleDescendants.length > 0 ? (
+            <ul
+              id={descendantsId}
+              aria-label={`${listLabel} of ${threadDisplayTitle(child)}`}
+              data-grandchild-thread-list={depth === 1 ? variant : undefined}
+              className={cn(
+                "flex flex-col",
+                variant === "header"
+                  ? "ml-5 border-l border-border pl-1"
+                  : "ml-3 border-l-[1.5px] border-border pl-2",
+              )}
+            >
+              {renderRows(visibleDescendants, depth + 1, path)}
+            </ul>
+          ) : null}
+        </li>
+      );
+    });
 
   return (
     <ul
@@ -327,78 +367,14 @@ export function ChildThreadList({
           : "ml-2.5 mt-1 border-l-[1.5px] border-border pl-1",
       )}
     >
-      {visibleThreads.map((child) => {
-        const title = threadDisplayTitle(child);
-        const grandchildren = (childrenByParent.get(child.id) ?? []).filter(
-          (thread) => !thread.isArchived,
-        );
-        const grandchildrenExpanded = expandedGrandchildParentIds.has(child.id);
-        // A collapsed disclosure still shows the active grandchild, so the
-        // open chat stays reachable without forcing the list open.
-        const visibleGrandchildren = grandchildrenExpanded
-          ? grandchildren
-          : grandchildren.filter(
-              (grandchild) =>
-                grandchild.id === activeThreadId ||
-                (showRunningChildrenWhenCollapsed &&
-                  childNeedsAttention(grandchild)),
-            );
-        const grandchildrenId = `${disclosureId}-${child.id}`;
-        return (
-          <li key={child.id} className="list-none">
-            <ChildThreadRow
-              thread={child}
-              relation="child"
-              variant={variant}
-              now={now}
-              isActive={child.id === activeThreadId}
-              onOpenThread={onOpenThread}
-              disclosure={
-                grandchildren.length > 0
-                  ? {
-                      count: grandchildren.length,
-                      expanded: grandchildrenExpanded,
-                      controls: grandchildrenId,
-                      onToggle: () => toggleGrandchildren(child.id),
-                    }
-                  : undefined
-              }
-            />
-            {visibleGrandchildren.length > 0 ? (
-              <ul
-                id={grandchildrenId}
-                aria-label={`Grandchildren of ${title}`}
-                data-grandchild-thread-list={variant}
-                className={cn(
-                  "flex flex-col",
-                  variant === "header"
-                    ? "ml-5 border-l border-border pl-1"
-                    : "ml-3 border-l-[1.5px] border-border pl-2",
-                )}
-              >
-                {visibleGrandchildren.map((grandchild) => (
-                  <li key={grandchild.id} className="list-none">
-                    <ChildThreadRow
-                      thread={grandchild}
-                      relation="grandchild"
-                      variant={variant}
-                      now={now}
-                      isActive={grandchild.id === activeThreadId}
-                      onOpenThread={onOpenThread}
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </li>
-        );
-      })}
+      {renderRows(visibleThreads, 1, new Set())}
     </ul>
   );
 }
 
 interface GrandchildDisclosure {
   count: number;
+  relation: string;
   expanded: boolean;
   controls: string;
   onToggle: () => void;
@@ -414,7 +390,7 @@ function ChildThreadRow({
   disclosure,
 }: {
   thread: PluginSidebarThread;
-  relation: "child" | "grandchild";
+  relation: string;
   variant: "header" | "sidebar";
   now?: number;
   isActive?: boolean;
@@ -556,7 +532,7 @@ function ChildThreadRow({
 }
 
 function childThreadOpenLabel(
-  relation: "child" | "grandchild",
+  relation: string,
   title: string,
   status: string | null,
 ): string {
@@ -566,11 +542,12 @@ function childThreadOpenLabel(
 function GrandchildDisclosureButton({
   title,
   count,
+  relation,
   expanded,
   controls,
   onToggle,
 }: GrandchildDisclosure & { title: string }) {
-  const noun = `grandchild thread${count === 1 ? "" : "s"}`;
+  const noun = `${relation} thread${count === 1 ? "" : "s"}`;
   const label = `${expanded ? "Hide" : "Show"} ${count} ${noun} for ${title}`;
 
   return (

@@ -151,7 +151,7 @@ describe("SubagentsChip", () => {
     expect(requests).toBe(1);
   });
 
-  it.each(["child", "grandchild"])("renames a %s without opening it and keeps the popup on cancel", async (targetId) => {
+  it.each(["child", "grandchild", "great-grandchild"])("renames a %s without opening it and keeps the popup on cancel", async (targetId) => {
     const rendered = renderSlot(
       childrenChip,
       { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
@@ -162,16 +162,20 @@ describe("SubagentsChip", () => {
             thread({ id: "parent", title: "Parent" }),
             thread({ id: "child", title: "Child", parentThreadId: "parent" }),
             thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
+            thread({ id: "great-grandchild", title: "Great-grandchild", parentThreadId: "grandchild" }),
           ],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
         },
       },
     );
     fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
-    if (targetId === "grandchild") {
+    if (targetId !== "child") {
       fireEvent.click(screen.getByRole("button", { name: "Show 1 grandchild thread for Child" }));
     }
-    const title = targetId === "child" ? "Child" : "Grandchild";
+    if (targetId === "great-grandchild") {
+      fireEvent.click(screen.getByRole("button", { name: "Show 1 great-grandchild thread for Grandchild" }));
+    }
+    const title = targetId === "child" ? "Child" : targetId === "grandchild" ? "Grandchild" : "Great-grandchild";
     const startRename = async () => {
       fireEvent.contextMenu(screen.getByRole("button", { name: `Open ${targetId} thread: ${title}` }));
       fireEvent.click(within(await screen.findByRole("menu", { name: "Thread actions" })).getByText("Rename"));
@@ -196,13 +200,14 @@ describe("SubagentsChip", () => {
 
   // The SDK test runtime logs open on pointerdown. These assertions verify
   // source binding/ID only, not actual host drop timing or mention insertion.
-  it("binds header child and grandchild sources without binding disclosure", () => {
+  it("binds header child, grandchild and fourth-level sources without binding disclosure", () => {
     const rendered = renderSlot(childrenChip,
       { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
       { sidebarThreads: { status: "ready", projects: [], threads: [
         thread({ id: "parent", title: "Parent" }),
         thread({ id: "child", title: "Child", parentThreadId: "parent" }),
         thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
+        thread({ id: "great-grandchild", title: "Great-grandchild", parentThreadId: "grandchild" }),
       ] } },
     );
     fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
@@ -210,13 +215,17 @@ describe("SubagentsChip", () => {
     fireEvent.pointerDown(disclosure, { button: 0 });
     expect(rendered.sidebarActionCalls).toEqual([]);
     fireEvent.click(disclosure);
-    for (const [relation, title, id] of [["child", "Child", "child"], ["grandchild", "Grandchild", "grandchild"]]) {
+    const deepDisclosure = screen.getByRole("button", { name: "Show 1 great-grandchild thread for Grandchild" });
+    fireEvent.pointerDown(deepDisclosure, { button: 0 });
+    fireEvent.click(deepDisclosure);
+    expect(rendered.sidebarActionCalls).toEqual([]);
+    for (const [relation, title, id] of [["child", "Child", "child"], ["grandchild", "Grandchild", "grandchild"], ["great-grandchild", "Great-grandchild", "great-grandchild"]]) {
       const source = screen.getByRole("button", { name: `Open ${relation} thread: ${title}` });
       expect(source.draggable).toBe(false);
       fireEvent.pointerDown(source, { button: 0 });
       expect(rendered.sidebarActionCalls.at(-1)).toEqual({ method: "open", threadId: id });
     }
-    expect(rendered.sidebarActionCalls).toHaveLength(2);
+    expect(rendered.sidebarActionCalls).toHaveLength(3);
   });
 
   it("mounts the shared child list in the header menu", () => {
@@ -667,4 +676,21 @@ describe("SubagentsChip", () => {
       ).toEqual(["Codex", "Claude Code", "opencode"]);
     });
   });
+});
+
+
+it("renders header hierarchy relative to the current child thread", () => {
+  renderSlot(childrenChip, { threadId: "child", projectId: "proj_1", isCompactViewport: false }, {
+    sidebarThreads: { status: "ready", projects: [], threads: [
+      thread({ id: "root", title: "Root" }),
+      thread({ id: "child", title: "Current child", parentThreadId: "root" }),
+      thread({ id: "grandchild", title: "Grandchild", parentThreadId: "child" }),
+      thread({ id: "deep", title: "Deep", parentThreadId: "grandchild", indicator: "waiting-for-input" }),
+    ] },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "1 child thread" }));
+  expect(screen.getByRole("button", { name: "Open child thread: Grandchild" })).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Show 1 grandchild thread for Grandchild" }));
+  expect(screen.getByRole("button", { name: "Open grandchild thread: Deep, Needs you" })).toBeDefined();
+  expect(screen.queryByRole("button", { name: /^Open child thread: Current child/ })).toBeNull();
 });

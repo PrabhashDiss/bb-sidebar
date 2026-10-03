@@ -34,7 +34,7 @@ import { ThreadCard, type ThreadReorderControls } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { CleanSettledDialog } from "./CleanSettledDialog";
 import { SearchResults } from "./SearchResults";
-import { childThreadsByParent } from "./ChildThreadList";
+import { childThreadsByParent, collapsedChildThreads } from "./ChildThreadList";
 import {
   ChildThreadDisplayContext,
   useChildThreadDisplayValue,
@@ -425,32 +425,38 @@ function visibleShelfThreads(
   expanded: boolean,
   activeThreadId: string | null,
   limit = threads.length,
+  attentionParentIds?: ReadonlySet<string>,
 ): PluginSidebarThread[] {
-  const activeThread = threads.find((thread) => thread.id === activeThreadId);
-  if (!expanded) return activeThread ? [activeThread] : [];
+  if (!expanded) {
+    return threads.filter(
+      (thread) => thread.id === activeThreadId || attentionParentIds?.has(thread.id),
+    );
+  }
   return threads.filter(
     (thread, index) => index < limit || thread.id === activeThreadId,
   );
 }
 
-function rootVisibleThreadId(
+/** Closest ancestor represented by an actual flat shelf row in this scope. */
+function activeRepresentativeThreadId(
   threads: readonly PluginSidebarThread[],
   threadId: string | null,
+  flatRows: readonly PluginSidebarThread[],
 ): string | null {
-  if (threadId === null) return null;
   const visibleById = new Map(
     visibleInboxThreads(threads).map((thread) => [thread.id, thread] as const),
   );
-  let current = visibleById.get(threadId);
-  if (!current) return threadId;
-  const visited = new Set([current.id]);
-  while (current.parentThreadId) {
-    const parent = visibleById.get(current.parentThreadId);
-    if (!parent || visited.has(parent.id)) break;
-    visited.add(parent.id);
-    current = parent;
+  const flatIds = new Set(flatRows.map((thread) => thread.id));
+  const visited = new Set<string>();
+  let current = threadId === null ? undefined : visibleById.get(threadId);
+  while (current && !visited.has(current.id)) {
+    if (flatIds.has(current.id)) return current.id;
+    visited.add(current.id);
+    current = current.parentThreadId
+      ? visibleById.get(current.parentThreadId)
+      : undefined;
   }
-  return current.id;
+  return null;
 }
 
 /**
@@ -588,10 +594,6 @@ export function ThreadInbox({
       return next.size === current.size ? current : next;
     });
   }, [childrenByParentId]);
-  const activeListThreadId = useMemo(
-    () => rootVisibleThreadId(threads, activeThreadId),
-    [activeThreadId, threads],
-  );
   const toggleChildExpansion = useCallback((parentThreadId: string) => {
     setExpandedChildParentIds((current) => {
       const next = new Set(current);
@@ -602,6 +604,7 @@ export function ThreadInbox({
   }, []);
 
   const {
+    activeListThreadId,
     pinnedBase,
     inboxBase,
     workingBase,
@@ -670,6 +673,9 @@ export function ThreadInbox({
     }
     const allSplit = partitionPinned(allVisible);
     return {
+      activeListThreadId: activeRepresentativeThreadId(
+        threads, activeThreadId, visible,
+      ),
       // BB supplies pinned rows in the user's persisted pin order.
       pinnedBase: split.pinned,
       inboxBase: sortByCreatedAtDescending(activeUnpinned),
@@ -689,6 +695,7 @@ export function ThreadInbox({
       settled: sortSettledThreads(onSettledShelf, lifecycle.settledAtFor),
     };
   }, [
+    activeThreadId,
     childrenByParentId,
     inactiveAfterHours,
     lifecycle,
@@ -778,18 +785,44 @@ export function ThreadInbox({
     () => orderPinnedThreads(inactiveBase, inboxReorder.ids),
     [inactiveBase, inboxReorder.ids],
   );
+  // Keep the root of an attention path reachable when its shelf is folded.
+  const attentionParentIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!(sidebarSettings?.showRunningChildrenWhenCollapsed ??
+      DEFAULT_SIDEBAR_SETTINGS.showRunningChildrenWhenCollapsed)) {
+      return ids;
+    }
+    for (const thread of [...pinnedBase, ...inboxBase, ...inactiveBase]) {
+      if (collapsedChildThreads(
+        childrenByParentId.get(thread.id) ?? [],
+        childrenByParentId,
+        null,
+        true,
+      ).length > 0) {
+        ids.add(thread.id);
+      }
+    }
+    return ids;
+  }, [
+    childrenByParentId, inactiveBase, inboxBase, pinnedBase,
+    sidebarSettings?.showRunningChildrenWhenCollapsed,
+  ]);
   const visiblePinned = useMemo(
     () =>
       visibleShelfThreads(
         pinned,
         expandedShelves.pinned,
         activeListThreadId,
+        undefined,
+        attentionParentIds,
       ),
-    [activeListThreadId, expandedShelves.pinned, pinned],
+    [attentionParentIds, activeListThreadId, expandedShelves.pinned, pinned],
   );
   const visibleInbox = useMemo(
-    () => visibleShelfThreads(inbox, expandedShelves.active, activeListThreadId),
-    [activeListThreadId, expandedShelves.active, inbox],
+    () => visibleShelfThreads(
+      inbox, expandedShelves.active, activeListThreadId, undefined, attentionParentIds,
+    ),
+    [attentionParentIds, activeListThreadId, expandedShelves.active, inbox],
   );
   const visibleWorking = useMemo(
     () =>
@@ -802,8 +835,10 @@ export function ThreadInbox({
         inactive,
         expandedShelves.inactive,
         activeListThreadId,
+        undefined,
+        attentionParentIds,
       ),
-    [activeListThreadId, expandedShelves.inactive, inactive],
+    [attentionParentIds, activeListThreadId, expandedShelves.inactive, inactive],
   );
   const sortedVisibleInbox = useMemo(
     () => sortActiveThreads(visibleInbox, activeSortMode),
@@ -816,8 +851,8 @@ export function ThreadInbox({
     [inbox],
   );
   const inboxProjectView = useMemo((): ProjectViewUnit[] => {
-    // A collapsed Active shelf hides its project headers too, leaving only
-    // the open thread, like every other collapsed shelf.
+    // A collapsed Active shelf hides its project headers too, leaving active
+    // and attention paths visible, like the other active shelves.
     if (!expandedShelves.active) {
       return visibleInbox.map((thread) => ({
         kind: "thread",
@@ -832,15 +867,18 @@ export function ThreadInbox({
         ...unit,
         expanded,
         threadCount: unit.threads.length,
-        // A collapsed project still shows the open thread, like a shelf.
+        // A collapsed project keeps active and attention paths, like a shelf.
         threads: visibleShelfThreads(
           unit.threads,
           expanded,
           activeListThreadId,
+          undefined,
+          attentionParentIds,
         ),
       };
     });
   }, [
+    attentionParentIds,
     activeListThreadId,
     collapsedProjectIds,
     expandedShelves.active,
@@ -895,14 +933,26 @@ export function ThreadInbox({
       ids: string[];
     } => {
       if (shelf === "inbox" && activeSortMode === "project") {
-        const group = inboxProjectView.find(
+        const visibleThreadIds = new Set(visibleInbox.map((thread) => thread.id));
+        // Folding Active hides headers, not the projects' reorder boundaries.
+        const units = expandedShelves.active
+          ? inboxProjectView
+          : storedProjectUnits.filter((unit) =>
+              unit.kind === "thread"
+                ? visibleThreadIds.has(unit.thread.id)
+                : unit.threads.some((thread) => visibleThreadIds.has(thread.id)),
+            );
+        const group = units.find(
           (unit) =>
             unit.kind === "group" &&
             unit.threads.some((thread) => thread.id === key),
         );
         return group?.kind === "group"
-          ? { mode: "thread", ids: group.threads.map((thread) => thread.id) }
-          : { mode: "unit", ids: inboxProjectView.map((unit) => unit.key) };
+          ? {
+              mode: "thread",
+              ids: group.threads.filter((thread) => visibleThreadIds.has(thread.id)).map((thread) => thread.id),
+            }
+          : { mode: "unit", ids: units.map((unit) => unit.key) };
       }
       return {
         mode: "thread",
@@ -911,7 +961,7 @@ export function ThreadInbox({
         ),
       };
     },
-    [activeSortMode, inboxProjectView, visibleInbox, visiblePinned],
+    [activeSortMode, expandedShelves.active, inboxProjectView, storedProjectUnits, visibleInbox, visiblePinned],
   );
   const reorderScopeRef = useRef(reorderScope);
   reorderScopeRef.current = reorderScope;
@@ -927,11 +977,14 @@ export function ThreadInbox({
       return;
     }
     const live = reorderTargetsRef.current.inbox;
+    const participating = new Set(previewIds);
     if (mode === "unit") {
+      const liveUnits = projectOrderUnits(storedProjectUnitsRef.current).filter((unit) => participating.has(unit.key));
+      if (!liveUnits.some((unit) => unit.key === movingId)) return;
       void live.reorder(
         rebaseMovedUnit(
           live.ids,
-          projectOrderUnits(storedProjectUnitsRef.current),
+          liveUnits,
           previewIds,
           movingId,
         ),
@@ -940,19 +993,22 @@ export function ThreadInbox({
     }
     // Within a project, its threads trade places among the slots they hold,
     // so the project itself stays where it is in the list.
-    const group =
+    const projectUnit =
       activeSortModeRef.current === "project"
         ? storedProjectUnitsRef.current.find(
             (unit) =>
-              unit.kind === "group" &&
-              unit.threads.some((thread) => thread.id === movingId),
+              unit.kind === "thread"
+                ? unit.thread.id === movingId
+                : unit.threads.some((thread) => thread.id === movingId),
           )
         : undefined;
     void live.reorder(
-      group?.kind === "group"
+      activeSortModeRef.current === "project"
         ? rebaseMovedUnit(
             live.ids,
-            group.threads.map((thread) => ({ key: thread.id, ids: [thread.id] })),
+            (projectUnit?.kind === "group" ? projectUnit.threads : projectUnit ? [projectUnit.thread] : [])
+              .filter((thread) => participating.has(thread.id))
+              .map((thread) => ({ key: thread.id, ids: [thread.id] })),
             previewIds,
             movingId,
           )
@@ -1098,12 +1154,19 @@ export function ThreadInbox({
               : hitRow?.hasAttribute("data-reorder-unit")
                 ? null
                 : hitRow;
+          const targetThreadId = row
+            ?.querySelector<HTMLAnchorElement>("[data-sidebar-thread-id]")
+            ?.getAttribute("data-sidebar-thread-id");
           const targetId =
             current.mode === "unit" && unitRow
               ? unitRow.getAttribute("data-reorder-unit")
-              : row
-                  ?.querySelector<HTMLAnchorElement>("[data-sidebar-thread-id]")
-                  ?.getAttribute("data-sidebar-thread-id");
+              : current.mode === "unit"
+                ? storedProjectUnitsRef.current.find((unit) =>
+                    unit.kind === "thread"
+                      ? unit.thread.id === targetThreadId
+                      : unit.threads.some((thread) => thread.id === targetThreadId),
+                  )?.key
+                : targetThreadId;
 
           let nextIds: string[] | null = null;
           if (
