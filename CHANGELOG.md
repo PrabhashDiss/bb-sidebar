@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.2.28] - 2026-10-03
+
 ### Added
 
 - **Compact working threads (experimental)**, off by default in sidebar settings. A thread with live work shows as one line, like a settled thread, ending in a small status icon and how long it has run (◌ 6m). It returns to a full card when it finishes, fails, or needs you. Folded rows still reorder, open their child threads, and keep the right-click menu.
