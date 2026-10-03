@@ -1,6 +1,7 @@
 import {
   useId,
   useLayoutEffect,
+  useEffect,
   useRef,
   useState,
   type KeyboardEventHandler,
@@ -114,11 +115,22 @@ export function ThreadCard({
   const actions = useSidebarThreadActions();
   const jumpHint = useJumpHint(thread.id);
   const { splitProps, layout } = useSidebarThreadSplit(thread.id);
-  // Opt-in per row: this costs a git-host lookup, and threads sharing a
-  // worktree share one.
-  const { pullRequest } = useSidebarThreadPullRequest(thread.id);
-  const [isRenaming, setIsRenaming] = useState(false);
   const rowRef = useRef<HTMLLIElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsVisible(entry?.isIntersecting ?? false);
+    });
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, []);
+  const [isRenaming, setIsRenaming] = useState(false);
   useLayoutEffect(() => {
     return () => {
       const focused = document.activeElement;
@@ -477,25 +489,7 @@ export function ThreadCard({
                 count={thread.activity.backgroundAgents}
               />
             ) : null}
-            {pullRequest ? (
-              <Tooltip
-                label={`${pullRequest.title}\n${pullRequestStatusLabel(pullRequest)}`}
-                className="whitespace-pre-line"
-              >
-                <a
-                  href={pullRequest.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(event) => event.stopPropagation()}
-                  className={cn(
-                    "pointer-events-auto relative shrink-0 font-mono hover:underline",
-                    pullRequestToneClass(pullRequest),
-                  )}
-                >
-                  #{pullRequest.number}
-                </a>
-              </Tooltip>
-            ) : null}
+            {isVisible ? <ThreadPullRequest threadId={thread.id} /> : null}
             <ProviderGlyph
               providerId={thread.providerId}
               provider={provider}
@@ -563,6 +557,32 @@ function ThreadLocation({ thread }: { thread: PluginSidebarThread }) {
   }
   return <span className="flex-1" />;
 }
+
+
+function ThreadPullRequest({ threadId }: { threadId: string }) {
+  const { pullRequest } = useSidebarThreadPullRequest(threadId);
+  if (!pullRequest) return null;
+  return (
+    <Tooltip
+      label={`${pullRequest.title}\n${pullRequestStatusLabel(pullRequest)}`}
+      className="whitespace-pre-line"
+    >
+      <a
+        href={pullRequest.url}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(event) => event.stopPropagation()}
+        className={cn(
+          "pointer-events-auto relative shrink-0 font-mono hover:underline",
+          pullRequestToneClass(pullRequest),
+        )}
+      >
+        #{pullRequest.number}
+      </a>
+    </Tooltip>
+  );
+}
+
 
 function ParkButton({
   label,
