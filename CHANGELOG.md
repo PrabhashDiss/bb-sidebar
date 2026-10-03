@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Regenerate title** reuses the thread's workspace instead of creating a personal workspace that can stall during setup. Selecting Codex for thread titles now uses a lightweight Codex helper, including for threads running through a custom provider. Turning thread titles off disables regeneration.
+- Selecting **bb cloud** for sidebar title regeneration now sends the last three user messages to bb cloud through the public account RPC. Automatic tries services in BB's advertised order, with cloud first. Explicit selections keep the existing title on failure and never switch to another service. Unsupported services show an error.
+
 ## [0.2.29] - 2026-10-03
 
 ### Added

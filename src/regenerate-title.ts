@@ -1,4 +1,5 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
+import { completeCloudTitle } from "./cloud-title";
 
 type Timeline = Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["timeline"]>>;
 type Row = Timeline["rows"][number];
@@ -95,7 +96,7 @@ export function parseTitle(output: string | null) {
   return title;
 }
 
-/** Until bb exposes helper inference, use its public hidden-thread workflow. */
+/** bb cloud uses its public account RPC; Codex uses a hidden agent helper. */
 export function createTitleRegenerator(bb: BbPluginApi) {
   const pending = new Map<string, Promise<{ title: string }>>();
   const helpers = new Set<string>();
@@ -119,34 +120,30 @@ export function createTitleRegenerator(bb: BbPluginApi) {
     await Promise.all([...helpers].map(cleanup));
   });
 
-  async function generate(threadId: string) {
-    const original = await bb.sdk.threads.get({ threadId });
-    const messages = await lastUserMessages(bb, threadId);
-    if (!messages.some(Boolean))
-      throw new Error(
-        "This thread has no user-message text to generate a title from",
-      );
-    // bb's AI-services setting picks plugin services, not agent models, and a
-    // plugin cannot prompt those. Generate with the model this thread runs.
-    const options = await bb.sdk.threads.defaultExecutionOptions({ threadId });
-    if (!options)
-      throw new Error("This thread has no agent model to generate a title with");
-    const { providerId } = original;
-    const providers = await bb.sdk.providers.list();
+  async function generateCodex(original: Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["get"]>>, messages: readonly string[]) {
+    if (!original.environmentId)
+      throw new Error("This thread needs a workspace before its title can be regenerated");
+    const providerId = "codex";
+    const providers = await bb.sdk.providers.list({ environmentId: original.environmentId });
     if (!providers.some((provider) => provider.id === providerId && provider.available))
       throw new Error(`Title regeneration needs the ${providerId} provider to be available`);
-    const personalProject = (await bb.sdk.projects.list({ includePersonal: true }))
-      .find((project) => project.kind === "personal");
-    if (!personalProject) throw new Error("No personal project is available for title generation");
+    const catalog = await bb.sdk.providers.models({
+      providerId, environmentId: original.environmentId,
+    });
+    const selected = catalog.models.find((entry) => entry.id === "gpt-6-luna") ??
+      catalog.models.find((entry) => entry.isDefault);
+    if (!selected) throw new Error("Codex has no available model for title generation");
     controller.signal.throwIfAborted();
     let title: string | undefined;
     let helperId: string | undefined;
     try {
       const helper = await bb.sdk.threads.spawn({
-        projectId: personalProject.id,
-        environment: { type: "host", workspace: { type: "personal" } },
+        projectId: original.projectId,
+        // Reusing the ready workspace avoids provisioning a personal workspace
+        // for each title, which can stall before the helper's turn even starts.
+        environment: { type: "reuse", environmentId: original.environmentId },
         providerId,
-        model: options.model,
+        model: selected.model,
         reasoningLevel: "low",
         permissionMode: "accept-edits",
         visibility: "hidden",
@@ -170,6 +167,44 @@ export function createTitleRegenerator(bb: BbPluginApi) {
       if (helperId) await cleanup(helperId);
     }
     if (!title) throw new Error("Could not generate a title");
+    return title;
+  }
+
+  async function generate(threadId: string) {
+    const original = await bb.sdk.threads.get({ threadId });
+    const messages = await lastUserMessages(bb, threadId);
+    if (!messages.some(Boolean))
+      throw new Error("This thread has no user-message text to generate a title from");
+    const { selections, services } = await bb.sdk.system.aiServices({ signal: controller.signal });
+    const selection = selections["thread-title"];
+    if (selection.mode === "off")
+      throw new Error("Thread titles are turned off in Settings → AI services");
+    const candidates = services
+      .filter((service) => service.tasks.includes("thread-title") && (
+        selection.mode === "automatic" ||
+        (service.pluginId === selection.pluginId && service.id === selection.serviceId)
+      ))
+      .sort((a, b) => (a.automaticRank ?? Infinity) - (b.automaticRank ?? Infinity));
+    let title: string | undefined;
+    let failure: unknown = new Error("No AI service is available for thread titles");
+    for (const service of candidates) {
+      controller.signal.throwIfAborted();
+      try {
+        if (!service.status.ready) throw new Error(service.status.message);
+        if (service.pluginId === "bb-ai" && service.id === "bb") {
+          title = parseTitle(await completeCloudTitle(bb, titlePrompt(messages), controller.signal));
+        } else if (service.pluginId === "provider-codex" && service.id === "codex") {
+          title = await generateCodex(original, messages);
+        } else {
+          throw new Error(`Sidebar title regeneration does not support ${service.displayName} yet`);
+        }
+        break;
+      } catch (error) {
+        failure = error;
+        if (selection.mode !== "automatic") throw error;
+      }
+    }
+    if (!title) throw failure;
     controller.signal.throwIfAborted();
     const current = await bb.sdk.threads.get({ threadId });
     if (current.title !== original.title)
