@@ -4365,6 +4365,41 @@ describe("parking threads", () => {
     },
   );
 
+  it.each([false, true])(
+    "keeps a compact row's working children folded until expanded (compact %s)",
+    async (compactWorkingThreads) => {
+      renderSlot(inbox, listProps, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent work", indicator: "runtime" }),
+            thread({ id: "child", parentThreadId: "parent", title: "Child work", indicator: "runtime" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+        },
+        rpc: {
+          getSidebarSettings: () => ({
+            ...defaultSidebarSettings,
+            inactiveThreadsEnabled: false,
+            showRunningChildrenWhenCollapsed: true,
+            compactWorkingThreads,
+          }),
+          listLifecycle: () => ({ rows: [] }),
+        },
+      });
+      await screen.findByRole("link", { name: "Parent work" });
+      // The full card surfaces a working child; the one-line row does not.
+      await waitFor(() =>
+        expect(screen.queryByText("Child work") === null).toBe(compactWorkingThreads),
+      );
+
+      if (compactWorkingThreads) {
+        fireEvent.click(screen.getByRole("button", { name: /1 child thread/ }));
+        expect(await screen.findByText("Child work")).toBeDefined();
+      }
+    },
+  );
+
   it("snoozes to a picked date and time from the snooze menu", async () => {
     const snooze = vi.fn(() => ({ ok: true }));
     renderSlot(inbox, listProps, {

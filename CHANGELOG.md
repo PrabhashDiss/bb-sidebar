@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- A compact working row keeps its child threads folded, including children that need attention, until you expand them from its badge. Full cards still show those children while folded when **Show children that need attention** is on.
+
 ## [0.2.28] - 2026-10-03
 
 ### Added

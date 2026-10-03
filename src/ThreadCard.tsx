@@ -119,6 +119,9 @@ export function ThreadCard({
   // that needs you, failed, or just woke keeps the full card.
   const compact =
     compactWhenWorking && !isWoke && threadShortStatus(thread)?.showsDuration === true;
+  // A folded row stays one line: its children wait for the badge to expand
+  // them, whatever "Show children that need attention" says.
+  const showChildrenWhenCollapsed = showRunningChildrenWhenCollapsed && !compact;
   const emphasis = isWoke
     ? "woke"
     : thread.isUnread
@@ -458,7 +461,7 @@ export function ThreadCard({
             childThreads,
             childrenByParent,
             activeThreadId,
-            showRunningChildrenWhenCollapsed,
+            showChildrenWhenCollapsed,
           ).length > 0) ? (
           <ChildThreadList
             id={childListId}
@@ -466,9 +469,7 @@ export function ThreadCard({
             childrenByParent={childrenByParent}
             activeThreadId={activeThreadId}
             expanded={childrenExpanded}
-            showRunningChildrenWhenCollapsed={
-              showRunningChildrenWhenCollapsed
-            }
+            showRunningChildrenWhenCollapsed={showChildrenWhenCollapsed}
             variant="sidebar"
             now={now}
             onOpenThread={(childId) => {
