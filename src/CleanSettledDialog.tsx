@@ -5,7 +5,7 @@ import { Icon } from "./components/Icon";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import type { bbSidebarRpcContract, SettledCleanupPreview, SettledCleanupResult } from "./server";
 
-export function CleanSettledDialog({ threadIds }: { threadIds: string[] }) {
+export function CleanSettledDialog({ threadIds, onNavigate }: { threadIds: string[]; onNavigate: () => void }) {
   const rpc = useRpc<typeof bbSidebarRpcContract>();
   const threadActions = useSidebarThreadActions();
   const portalScope = usePortalScopeProps();
@@ -94,8 +94,9 @@ export function CleanSettledDialog({ threadIds }: { threadIds: string[] }) {
                         <button
                           type="button"
                           aria-label={`Open thread: ${thread.title}`}
-                          onClick={() => { threadActions.open(thread.threadId); setOpen(false); }}
-                          className="ml-2 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          disabled={busy}
+                          onClick={() => { if (busy) return; threadActions.open(thread.threadId); onNavigate(); setOpen(false); }}
+                          className="ml-2 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
                         >
                           Open
                         </button>

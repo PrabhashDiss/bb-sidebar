@@ -225,6 +225,7 @@ export function ChildThreadBadge({
     <Tooltip label={tooltip} side="bottom">
       <button
         type="button"
+        data-thread-control="child-badge"
         aria-label={tooltip}
         aria-expanded={expanded}
         aria-controls={controls}
@@ -464,6 +465,7 @@ function ChildThreadRow({
       >
         <ThreadDetailsTooltip thread={thread} disabled={isRenaming}>
           <RowAction
+            data-child-thread-id={thread.id}
             type={isRenaming ? undefined : "button"}
             aria-label={
               isRenaming

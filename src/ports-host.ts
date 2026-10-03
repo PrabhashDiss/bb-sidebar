@@ -58,6 +58,19 @@ async function scanPorts(roots: PortRoot[], signal: AbortSignal) {
   }
   const ports = new Map<string, OpenPort & { environmentId: string }>();
   const ownerByPid = new Map<number, string | undefined>();
+  const startByPid = new Map<number, string | undefined>();
+  async function processStart(pid: number): Promise<string | undefined> {
+    if (startByPid.has(pid)) return startByPid.get(pid);
+    let startedAt: string | undefined;
+    try {
+      const value = (await run("ps", ["-p", String(pid), "-o", "lstart="], signal)).trim();
+      if (Number.isFinite(Date.parse(value))) startedAt = value;
+    } catch (error) {
+      if (signal.aborted) throw error;
+    }
+    startByPid.set(pid, startedAt);
+    return startedAt;
+  }
   async function ownerThread(pid: number): Promise<string | undefined> {
     if (ownerByPid.has(pid)) return ownerByPid.get(pid);
     let owner: string | undefined;
@@ -95,7 +108,8 @@ async function scanPorts(roots: PortRoot[], signal: AbortSignal) {
     const cwd = cwds.get(listener.pid);
     if (cwd && attribute(cwd, canonicalRoots)) {
       const ownerThreadId = await ownerThread(listener.pid);
-      add(cwd, { ...listener, source: "process", ...(ownerThreadId ? { ownerThreadId } : {}) });
+      const processStartedAt = ownerThreadId ? await processStart(listener.pid) : undefined;
+      add(cwd, { ...listener, source: "process", ...(ownerThreadId ? { ownerThreadId } : {}), ...(processStartedAt ? { processStartedAt } : {}) });
     }
   }
   try {
@@ -142,6 +156,12 @@ async function viewPullRequests(urls: string[], signal: AbortSignal) {
 export default experimental_defineHostEntry({
   contract: portScanContract,
   handlers: {
+    async resolveRoots({ roots }) {
+      return { roots: await Promise.all(roots.map(async (root) => ({
+        environmentId: root.environmentId,
+        path: await realpath(root.path).catch(() => null),
+      }))) };
+    },
     async scan({ roots }, { signal }) {
       return scanPorts(roots, signal);
     },

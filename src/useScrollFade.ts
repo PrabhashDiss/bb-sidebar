@@ -9,8 +9,8 @@ const FADE_PX = 12;
  * scroll, up to FADE_PX, so a list resting at its top has a crisp top edge.
  *
  * Writes `--scroll-fade-top` and `--scroll-fade-bottom` on the scroller, read
- * by SCROLL_FADE_CLASS. Content changes are caught by observing the scroller's
- * children, since a shelf opening changes the scroll height without a scroll.
+ * by SCROLL_FADE_CLASS. Watch replacement children as well as their sizes:
+ * loading and search swap whole shelf trees without replacing the scroller.
  */
 export function useScrollFade<T extends HTMLElement>() {
   return useCallback((node: T | null) => {
@@ -30,11 +30,21 @@ export function useScrollFade<T extends HTMLElement>() {
     node.addEventListener("scroll", update, { passive: true });
     const observer =
       typeof ResizeObserver === "function" ? new ResizeObserver(update) : null;
-    observer?.observe(node);
-    for (const child of Array.from(node.children)) observer?.observe(child);
+    const observeSizes = () => {
+      observer?.disconnect();
+      observer?.observe(node);
+      for (const child of Array.from(node.children)) observer?.observe(child);
+    };
+    observeSizes();
+    const mutations = new MutationObserver((records) => {
+      if (records.some((record) => record.target === node && record.type === "childList")) observeSizes();
+      update();
+    });
+    mutations.observe(node, { childList: true, characterData: true, subtree: true });
     return () => {
       node.removeEventListener("scroll", update);
       observer?.disconnect();
+      mutations.disconnect();
     };
   }, []);
 }

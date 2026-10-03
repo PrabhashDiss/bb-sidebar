@@ -33,6 +33,7 @@ function commands(docker: () => string = () => "") {
     if (command === "lsof") return { stdout: args.includes("-d") ? "p123\nfcwd\nn/workspace/app\np456\nfcwd\nn/workspace/app\n" : sockets };
     if (command === "ps") return { stdout: args[0] === "eww"
       ? "node app.js BB_THREAD_ID=thr_owner PATH=/bin"
+      : args.includes("lstart=") ? "Sat Oct  3 12:29:38 2026\n"
       : "123 node app.js\n456 node /opt/bb-app/server/dist/index.js" };
     if (command === "docker") return { stdout: docker() };
     throw new Error(`Unexpected command ${command}`);
@@ -44,7 +45,7 @@ describe("host port scan", () => {
     commands(() => "abc\tapp-web-1\t0.0.0.0:3000->3000/tcp, 0.0.0.0:8080->8080/tcp\t/workspace/app\tweb");
     const result = await harness.experimental_call("scan", { roots });
     expect(result.ports).toEqual([
-      { environmentId: "env_a", port: 3000, address: "127.0.0.1", pid: 123, processName: "node", source: "process", ownerThreadId: "thr_owner", container: "app-web-1", service: "web" },
+      { environmentId: "env_a", port: 3000, address: "127.0.0.1", pid: 123, processName: "node", source: "process", ownerThreadId: "thr_owner", processStartedAt: "Sat Oct  3 12:29:38 2026", container: "app-web-1", service: "web" },
       { environmentId: "env_a", port: 8080, address: "0.0.0.0", source: "docker", container: "app-web-1", service: "web" },
     ]);
   });

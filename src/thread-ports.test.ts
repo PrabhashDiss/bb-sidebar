@@ -22,7 +22,7 @@ it("routes port actions to the thread's current host and filters ownership", asy
   try {
     const actions = createThreadPortActions(bb);
     const result = await actions.getThreadPorts({ threadId: "thr_a" });
-    expect(result).toEqual({ ports: [{ port: 3000, pid: 100 }] });
+    expect(result).toEqual({ ports: [{ port: 3000, pid: 100 }], workspace: { environmentId: "env_a", hostId: "host_a", path: "/workspace/a" } });
     await actions.closeThreadPorts({ threadId: "thr_a", ports: result.ports });
     expect(harness.inspection.experimental_hostRpcCalls.at(-1)).toMatchObject({
       hostId: "host_a", method: "closeOwnedPorts",

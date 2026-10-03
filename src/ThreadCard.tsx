@@ -1,5 +1,7 @@
 import {
   useId,
+  useLayoutEffect,
+  useRef,
   useState,
   type KeyboardEventHandler,
   type PointerEventHandler,
@@ -64,6 +66,7 @@ export function ThreadCard({
   canPark,
   snoozePresets,
   onNavigate,
+  onRenamingChange,
   onPark,
   onSettle,
   onSnooze,
@@ -91,6 +94,7 @@ export function ThreadCard({
   canPark: boolean;
   snoozePresets: readonly ConfiguredSnoozePreset[];
   onNavigate: () => void;
+  onRenamingChange?: (editing: boolean) => void;
   onPark?: () => void;
   onSettle: () => void;
   onSnooze: (snoozedUntil: number) => void;
@@ -114,15 +118,44 @@ export function ThreadCard({
   // worktree share one.
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
   const [isRenaming, setIsRenaming] = useState(false);
+  const rowRef = useRef<HTMLLIElement>(null);
+  useLayoutEffect(() => {
+    return () => {
+      const focused = document.activeElement;
+      if (!(focused instanceof HTMLElement) || !rowRef.current?.contains(focused)) return;
+      const sidebar = rowRef.current.closest<HTMLElement>("[data-bb-sidebar-root]");
+      const childId = focused.getAttribute("data-child-thread-id");
+      const control = focused.getAttribute("data-thread-control");
+      // Moving a row between shelf trees unmounts its focused control.
+      queueMicrotask(() => {
+        if (!sidebar?.isConnected || document.activeElement !== document.body) return;
+        const replacement = [...sidebar.querySelectorAll<HTMLAnchorElement>("a[data-sidebar-thread-id]")]
+          .find((link) => link.dataset.sidebarThreadId === thread.id);
+        const row = replacement?.closest("li");
+        const child = childId && [...(row?.querySelectorAll<HTMLElement>("[data-child-thread-id]") ?? [])]
+          .find((item) => item.dataset.childThreadId === childId);
+        const matchingControl = control && [...(row?.querySelectorAll<HTMLElement>("[data-thread-control]") ?? [])]
+          .find((item) => item.dataset.threadControl === control);
+        (child || matchingControl || replacement)?.focus();
+      });
+    };
+  }, [thread.id]);
+  const compactAtRenameStart = useRef(false);
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
   const childListId = useId();
   const liveStatus = threadShortStatus(thread)?.showsDuration === true;
   // A thread stays folded until everything under it is done; it unfolds at
   // once when it needs you, fails, or just woke.
-  const compact =
+  const naturalCompact =
     compactWhenWorking &&
     !isWoke &&
     isWorkingTree(thread, childThreads, childrenByParent);
+  const compact = isRenaming ? compactAtRenameStart.current : naturalCompact;
+  const changeRenaming = (editing: boolean) => {
+    if (editing) compactAtRenameStart.current = compact;
+    setIsRenaming(editing);
+    onRenamingChange?.(editing);
+  };
   // A folded row stays one line: its children wait for the badge to expand
   // them, whatever "Show children that need attention" says.
   const showChildrenWhenCollapsed = showRunningChildrenWhenCollapsed && !compact;
@@ -152,8 +185,9 @@ export function ThreadCard({
         }}
         className={cn(
           "shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground",
+          "pointer-events-auto",
           !showParkActions &&
-            "pointer-events-auto opacity-0 transition-opacity duration-150 ease-out focus-visible:opacity-100 group-hover/card:opacity-100 motion-reduce:transition-none",
+            "opacity-0 transition-opacity duration-150 ease-out focus-visible:opacity-100 group-hover/card:opacity-100 motion-reduce:transition-none",
         )}
       >
         <Icon name="PinOff" className="size-3.5" />
@@ -175,7 +209,7 @@ export function ThreadCard({
       <InlineThreadTitle
         thread={thread}
         editing={isRenaming}
-        onEditingChange={setIsRenaming}
+        onEditingChange={changeRenaming}
       />
     </div>
   );
@@ -189,9 +223,10 @@ export function ThreadCard({
       snoozePresets={snoozePresets}
       onSnooze={onSnooze}
       onSettle={canPark ? onSettle : undefined}
-      onRename={() => setIsRenaming(true)}
+      onRename={() => changeRenaming(true)}
     >
       <li
+        ref={rowRef}
         className={cn(
           "list-none",
           // The row stays in the flow — the list reorders around it — but it
@@ -245,7 +280,7 @@ export function ThreadCard({
               onDoubleClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                setIsRenaming(true);
+                changeRenaming(true);
               }}
               className={cn(
                 // Vertical panning stays with the scroller; this row never
@@ -279,7 +314,7 @@ export function ThreadCard({
                 <InlineThreadTitle
                   thread={thread}
                   editing={isRenaming}
-                  onEditingChange={setIsRenaming}
+                  onEditingChange={changeRenaming}
                   className={cn(
                     "min-w-0 flex-1 truncate text-foreground",
                     thread.isUnread && "font-medium",

@@ -13,19 +13,54 @@ export function createThreadPortActions(bb: BbPluginApi) {
     if (environment.status !== "ready" || !environment.path) throw new Error("Thread workspace is unavailable");
     return {
       root: { environmentId: environment.id, path: environment.path },
+      workspace: { environmentId: environment.id, hostId: environment.hostId, path: environment.path },
       options: { hostId: environment.hostId, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) },
     };
   }
   return {
+    async getThreadWorkspace({ threadId }: { threadId: string }) {
+      return (await context(threadId))?.workspace ?? null;
+    },
+    async canonicalWorkspacePaths(threads: readonly PortThread[]) {
+      const byHost = new Map<string, PortThread[]>();
+      for (const thread of threads) {
+        if (!thread.environmentHostId || !thread.environmentId || !thread.environmentPath) continue;
+        byHost.set(thread.environmentHostId, [...(byHost.get(thread.environmentHostId) ?? []), thread]);
+      }
+      const paths = new Map<string, string>();
+      const failedHosts = new Set<string>();
+      await Promise.all([...byHost].map(async ([hostId, hostThreads]) => {
+        try {
+          const roots = [...new Map(hostThreads.map((thread) => [thread.environmentId!, {
+            environmentId: thread.environmentId!, path: thread.environmentPath!,
+          }])).values()];
+          const result = await host.call("resolveRoots", { roots }, {
+            hostId, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]),
+          });
+          for (const root of result.roots) if (root.path) paths.set(root.environmentId, root.path);
+        } catch {
+          controller.signal.throwIfAborted();
+          failedHosts.add(hostId);
+        }
+      }));
+      return { paths, failedHosts };
+    },
     async getThreadPorts({ threadId }: { threadId: string }) {
       const target = await context(threadId);
-      if (!target) return { ports: [] };
+      if (!target) return { ports: [], workspace: null };
       const result = await host.call("scan", { roots: [target.root] }, target.options);
-      return { ports: result.ports.filter((port) => port.environmentId === target.root.environmentId && port.ownerThreadId === threadId && port.source === "process" && port.pid && port.pid > 1).map((port) => ({ port: port.port, pid: port.pid! })) };
+      return {
+        ports: result.ports.filter((port) => port.environmentId === target.root.environmentId && port.ownerThreadId === threadId && port.source === "process" && port.pid && port.pid > 1).map((port) => ({ port: port.port, pid: port.pid!, ...(port.processStartedAt ? { processStartedAt: port.processStartedAt } : {}) })),
+        workspace: target.workspace,
+      };
     },
-    async closeThreadPorts({ threadId, ports, scope = "thread" }: { threadId: string; ports: OwnedPortTarget[]; scope?: PortCloseScope }) {
+    async closeThreadPorts({ threadId, ports, scope = "thread", expectedWorkspace }: { threadId: string; ports: OwnedPortTarget[]; scope?: PortCloseScope; expectedWorkspace?: { environmentId: string; hostId: string; path: string } }) {
       const target = await context(threadId);
       if (!target) throw new Error("Thread has no workspace");
+      if (expectedWorkspace && (target.workspace.environmentId !== expectedWorkspace.environmentId ||
+          target.workspace.hostId !== expectedWorkspace.hostId || target.workspace.path !== expectedWorkspace.path)) {
+        throw new Error("Thread workspace changed since preview");
+      }
       return host.call("closeOwnedPorts", { root: target.root, threadId, ports, scope }, target.options);
     },
     /**

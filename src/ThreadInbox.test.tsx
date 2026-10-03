@@ -12,6 +12,7 @@ import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { idleSidebarThreadFields } from "./test-fixtures";
 import { DEFAULT_SNOOZE_PRESET_CONFIG, formatSnoozeWakeTime } from "./lifecycle";
+import { isWorkingTree } from "./working-tree";
 import type { SidebarProvider } from "./ProviderGlyph";
 
 const toastMocks = vi.hoisted(() => ({
@@ -4180,7 +4181,8 @@ describe("parking threads", () => {
   });
 
   it("opens a thread from the Clean preview and closes the dialog", async () => {
-    const rendered = renderSlot(inbox, listProps, {
+    const onNavigate = vi.fn();
+    const rendered = renderSlot(inbox, { ...listProps, onNavigate }, {
       sidebarThreads: {
         status: "ready",
         threads: [thread({ id: "thr_terminal", title: "Check this terminal" })],
@@ -4200,7 +4202,75 @@ describe("parking threads", () => {
     const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
     fireEvent.click(await within(dialog).findByRole("button", { name: "Open thread: Check this terminal" }));
     expect(rendered.sidebarActionCalls).toContainEqual({ method: "open", threadId: "thr_terminal" });
+    expect(onNavigate).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Clean settled resources?" })).toBeNull());
+  });
+
+  it("keeps the Clean preview open while cleanup is running", async () => {
+    const pending = deferred<{ closedTerminals: number; signalledPorts: never[]; remainingPorts: never[]; skipped: never[]; failed: never[] }>();
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_terminal", title: "Check this terminal" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: [{ threadId: "thr_terminal", settledAt: 200, snoozedUntil: null, snoozedAt: null }] }),
+        previewSettledCleanup: () => ({
+          token: "98bb67b5-b58b-4fc4-9a55-34e557dc8f55",
+          threads: [{ threadId: "thr_terminal", title: "Check this terminal", terminalCount: 1, ports: [] }],
+          skipped: [],
+        }),
+        cleanSettled: () => pending.promise,
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
+    const cleanButton = await within(dialog).findByRole("button", { name: "Clean resources" });
+    fireEvent.click(cleanButton);
+    const openButton = within(dialog).getByRole("button", { name: "Open thread: Check this terminal" });
+    expect(openButton).toHaveProperty("disabled", true);
+    fireEvent.click(openButton);
+    expect(rendered.sidebarActionCalls).not.toContainEqual({ method: "open", threadId: "thr_terminal" });
+    expect(screen.getByRole("dialog", { name: "Clean settled resources?" })).toBeDefined();
+    pending.resolve({ closedTerminals: 1, signalledPorts: [], remainingPorts: [], skipped: [], failed: [] });
+    await waitFor(() => expect(dialog.textContent).toContain("1 terminal closed"));
+  });
+
+  it("keeps cleanup failures visible after the last thread leaves Settled", async () => {
+    const pending = deferred<never>();
+    let settled = true;
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_terminal", title: "Last settled thread" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        listLifecycle: () => ({ rows: settled ? [{ threadId: "thr_terminal", settledAt: 200, snoozedUntil: null, snoozedAt: null }] : [] }),
+        previewSettledCleanup: () => ({
+          token: "98bb67b5-b58b-4fc4-9a55-34e557dc8f55",
+          threads: [{ threadId: "thr_terminal", title: "Last settled thread", terminalCount: 1, ports: [] }],
+          skipped: [],
+        }),
+        cleanSettled: () => pending.promise,
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(within(shelf).getByRole("button", { name: "Clean settled resources" }));
+    const dialog = await screen.findByRole("dialog", { name: "Clean settled resources?" });
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Clean resources" }));
+    await within(dialog).findByRole("button", { name: "Cleaning..." });
+
+    settled = false;
+    await rendered.emitRealtime("lifecycle", {});
+    await waitFor(() => expect(shelf.hidden).toBe(true));
+    expect(screen.getByRole("dialog", { name: "Clean settled resources?" })).toBe(dialog);
+
+    await act(async () => pending.reject(new Error("Cleanup connection lost")));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("Cleanup connection lost");
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveProperty("disabled", false);
   });
 
   it("moves a settled thread to the Settled shelf", async () => {
@@ -4532,6 +4602,35 @@ describe("parking threads", () => {
     // The parent's own question outranks its children's work.
     expect(isCompact("Asking parent")).toBe(false);
     expect(isCompact("Done parent")).toBe(false);
+  });
+
+  it("counts live descendants despite unread success and keeps requests for input in Active", () => {
+    const parent = thread({ id: "parent" });
+    const liveChild = thread({ id: "child", parentThreadId: "parent", indicator: "unread-success", status: "active" });
+    expect(isWorkingTree(parent, [liveChild], new Map())).toBe(true);
+    const askingParent = thread({ id: "asking", indicator: "waiting-for-input", activity: {
+      workflows: 0, backgroundAgents: 1, backgroundCommands: 0, planMode: 0, goals: 0,
+    } });
+    expect(isWorkingTree(askingParent, [], new Map())).toBe(false);
+  });
+
+  it("keeps Unpin clickable on a parent compacted by child work", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "parent", title: "Pinned parent", isPinned: true }),
+          thread({ id: "child", parentThreadId: "parent", indicator: "runtime" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        getSidebarSettings: () => ({ ...defaultSidebarSettings, compactWorkingThreads: true }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+    const button = await screen.findByRole("button", { name: "Unpin Pinned parent" });
+    expect(button.classList.contains("pointer-events-auto")).toBe(true);
   });
 
   it.each([true, false])(

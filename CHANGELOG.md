@@ -15,6 +15,14 @@
 - A compact working row stays compact until everything under it is done: its own turn, its background agents, commands and workflows, and any working child or grandchild. It used to unfold into a full card as soon as the parent's own turn ended. It still unfolds at once if the parent needs you or fails. While only its children run, the row shows its usual status or age, and the badge shows the children still working.
 - A compact working row keeps its child threads folded, including children that need attention, until you expand them from its badge. Full cards still show those children while folded when **Show children that need attention** is on.
 
+### Fixed
+
+- Clean rechecks a thread before each terminal close and skips terminals in workspaces shared with Active or Working threads. It checks each terminal's own environment and host, even when the thread has moved. Workspace paths are resolved on the host before comparing them, including symlink aliases; unresolved paths block cleanup.
+- Clean binds previewed ports to their workspace and process start time, preserves partial shutdown results, and retains preview inspection failures in its final report. Open stays disabled during cleanup and closes the mobile sidebar drawer when used.
+- Live descendants remain classified as working even when their unread-success badge takes precedence. A thread requesting input stays in Active, compact Unpin controls remain clickable, and a rename in progress stays mounted while work finishes. If an attention, pin, or dock change interrupts a rename, its draft saves once and its shelf lock clears. Keyboard focus follows the thread or child control between shelves.
+- Clean's result remains visible if its last Settled thread leaves the shelf while cleanup is running.
+- Scroll-edge fades update when loading or search replaces the list contents.
+
 ## [0.2.28] - 2026-10-03
 
 ### Added

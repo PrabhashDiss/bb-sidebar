@@ -98,6 +98,11 @@ const PROJECT_COLLAPSE_STORAGE_KEY = "bb-sidebar:project-collapse:v1";
 const SETTLED_INITIAL_LIMIT = 10;
 const SETTLED_PAGE_SIZE = 25;
 
+function threadNeedsAttention(thread: PluginSidebarThread): boolean {
+  return thread.hasPendingInteraction || thread.indicator === "waiting-for-input" ||
+    thread.indicator === "unread-error" || thread.queuedWork === "failed";
+}
+
 function readCollapsedProjects(): Set<string> {
   try {
     const stored = window.localStorage.getItem(PROJECT_COLLAPSE_STORAGE_KEY);
@@ -526,6 +531,16 @@ export function ThreadInbox({
     readCollapsedProjects,
   );
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
+  const [renamingShelfLocks, setRenamingShelfLocks] = useState<Map<string, "active" | "working" | "inactive">>(() => new Map());
+  useEffect(() => {
+    const activeIds = new Set(threads.filter((thread) =>
+      !thread.isArchived && lifecycle.shelfFor(thread) === "active" && !threadNeedsAttention(thread)
+    ).map((thread) => thread.id));
+    setRenamingShelfLocks((current) => {
+      const next = new Map([...current].filter(([threadId]) => activeIds.has(threadId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [lifecycle, threads]);
   useEffect(() => {
     const pruned = pruneChildExpansion([...expandedChildParentIds]);
     safeSetItem(
@@ -619,6 +634,20 @@ export function ThreadInbox({
     const working: typeof split.inbox = [];
     const inactive: typeof split.inbox = [];
     for (const thread of split.inbox) {
+      const lockedShelf = renamingShelfLocks.get(thread.id);
+      const needsAttention = threadNeedsAttention(thread);
+      if (lockedShelf === "active") {
+        activeUnpinned.push(thread);
+        continue;
+      }
+      if (lockedShelf === "working" && workingShelfEnabled && !needsAttention && !lifecycle.wokeFor(thread)) {
+        working.push(thread);
+        continue;
+      }
+      if (lockedShelf === "inactive" && !needsAttention) {
+        inactive.push(thread);
+        continue;
+      }
       // A thread with work running anywhere under it waits on the Working
       // shelf, unless it just woke from a snooze: that is news for Active.
       if (
@@ -662,6 +691,7 @@ export function ThreadInbox({
     inactiveAfterHours,
     lifecycle,
     now,
+    renamingShelfLocks,
     scope,
     threads,
     workingShelfEnabled,
@@ -1326,6 +1356,7 @@ export function ThreadInbox({
     reorderable = true,
     showProject = true,
     compact = false,
+    renameShelf: "active" | "working" | "inactive" = "active",
   ) => (
     <ThreadCard
       key={thread.id}
@@ -1339,6 +1370,14 @@ export function ThreadInbox({
       canPark={lifecycle.canPark(thread)}
       snoozePresets={snoozePresets}
       onNavigate={onNavigate}
+      onRenamingChange={(editing) => {
+        setRenamingShelfLocks((current) => {
+          const next = new Map(current);
+          if (editing) next.set(thread.id, renameShelf);
+          else next.delete(thread.id);
+          return next;
+        });
+      }}
       onPark={() => parkThread(thread)}
       onSettle={() => settleThread(thread)}
       onSnooze={(until) => snoozeThread(thread, until)}
@@ -1373,7 +1412,7 @@ export function ThreadInbox({
     <ChildThreadDisplayContext.Provider value={childDisplay}>
     <OpenPortsProvider>
     <JumpHintsContext.Provider value={jumpHints}>
-      <div ref={jumpHintsRootRef} className="flex min-h-0 flex-1 flex-col">
+      <div ref={jumpHintsRootRef} data-bb-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
         {/* The one control the host has no equivalent for. Everything else in
             the chrome above — New thread, search — is bb's and stays bb's. */}
         <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
@@ -1541,7 +1580,7 @@ export function ThreadInbox({
                       <Shelf label={null}>
                         {/* One line, like every shelf after Active. */}
                         {visibleWorking.map((thread) =>
-                          renderActiveThread(thread, "inbox", false, true, true),
+                          renderActiveThread(thread, "inbox", false, true, true, "working"),
                         )}
                       </Shelf>
                     </CollapsibleShelf>
@@ -1561,7 +1600,7 @@ export function ThreadInbox({
                     >
                       <Shelf label={null}>
                         {visibleInactive.map((thread) =>
-                          renderActiveThread(thread, "inbox", false),
+                          renderActiveThread(thread, "inbox", false, true, false, "inactive"),
                         )}
                       </Shelf>
                     </CollapsibleShelf>
@@ -1787,7 +1826,7 @@ function CompactShelf({
   onSnooze: (thread: PluginSidebarThread, until: number) => void;
 }) {
   const attachListAutoAnimateRef = useListAutoAnimate<HTMLUListElement>();
-  if (threads.length === 0) return null;
+  if (threads.length === 0 && shelf !== "settled") return null;
   const now = Date.now();
   const limit =
     shelf === "settled" ? (settledLimit ?? threads.length) : threads.length;
@@ -1795,11 +1834,12 @@ function CompactShelf({
   return (
     <CollapsibleShelf
       label={label}
+      hidden={threads.length === 0}
       icon={icon}
       count={threads.length}
       expanded={expanded}
       onToggle={onToggle}
-      action={shelf === "settled" ? <CleanSettledDialog threadIds={threads.map((thread) => thread.id)} /> : undefined}
+      action={shelf === "settled" ? <CleanSettledDialog threadIds={threads.map((thread) => thread.id)} onNavigate={onNavigate} /> : undefined}
     >
       <ul ref={attachListAutoAnimateRef} className="flex flex-col gap-px">
         {visibleThreads.map((thread) => (
@@ -1897,6 +1937,7 @@ function CollapsibleShelf({
   onToggle,
   action,
   children,
+  hidden = false,
 }: {
   label: string;
   icon: IconName;
@@ -1906,9 +1947,10 @@ function CollapsibleShelf({
   onToggle: () => void;
   action?: React.ReactNode;
   children: React.ReactNode;
+  hidden?: boolean;
 }) {
   return (
-    <section aria-label={label}>
+    <section aria-label={label} hidden={hidden}>
       <div className="relative">
         <button
           type="button"

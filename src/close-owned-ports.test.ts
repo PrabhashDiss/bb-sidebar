@@ -36,7 +36,7 @@ describe("closing thread-owned ports", () => {
     ];
     const result = await closeOwnedPortProcesses("thr_a", [{ port: 3000, pid: 10 }, { port: 4000, pid: 20 }, { port: 5000, pid: 30 }, { port: 6000, pid: 10 }], async () => listeners, terminate, "workspace");
     expect(terminate.mock.calls).toEqual([[10], [20]]);
-    expect(result).toEqual({ signalled: [3000, 6000, 4000], skipped: [5000], failed: [] });
+    expect(result).toEqual({ signalled: [3000, 4000], skipped: [6000, 5000], failed: [] });
   });
 
   it("rechecks between processes and reports shutdown failures", async () => {
@@ -47,5 +47,27 @@ describe("closing thread-owned ports", () => {
     expect(await closeOwnedPortProcesses("thr_a", [{ port: 3000, pid: 10 }, { port: 4000, pid: 20 }], scan, terminate))
       .toEqual({ signalled: [], skipped: [4000], failed: [3000] });
     expect(scan).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips a reused PID even when the same thread owns the same port", async () => {
+    const terminate = vi.fn();
+    const result = await closeOwnedPortProcesses("thr_a", [
+      { port: 3000, pid: 10, processStartedAt: "old start" },
+    ], async () => [
+      { port: 3000, pid: 10, processStartedAt: "new start", source: "process", ownerThreadId: "thr_a" },
+    ], terminate);
+    expect(result).toEqual({ signalled: [], skipped: [3000], failed: [] });
+    expect(terminate).not.toHaveBeenCalled();
+  });
+
+  it("keeps earlier shutdown successes when a later process scan fails", async () => {
+    const terminate = vi.fn();
+    const scan = vi.fn()
+      .mockResolvedValueOnce([{ port: 3000, pid: 10, source: "process", ownerThreadId: "thr_a" }])
+      .mockRejectedValueOnce(new Error("scan failed"));
+    expect(await closeOwnedPortProcesses("thr_a", [
+      { port: 3000, pid: 10 }, { port: 4000, pid: 20 },
+    ], scan, terminate)).toEqual({ signalled: [3000], skipped: [], failed: [4000] });
+    expect(terminate).toHaveBeenCalledExactlyOnceWith(10);
   });
 });
