@@ -29,6 +29,8 @@ export interface SidebarSettingsValues {
   compactWorkingThreads: boolean;
   /** Experimental: move threads with live work to their own shelf. */
   workingShelf: boolean;
+  /** Experimental: keep the shelves below Active docked to the bottom. */
+  dockShelves: boolean;
 }
 
 import { safeSetItem } from "./lib/safe-storage";
@@ -47,6 +49,7 @@ export const DEFAULT_SIDEBAR_SETTINGS: SidebarSettingsValues = {
   childIconStyle: "disc",
   compactWorkingThreads: false,
   workingShelf: false,
+  dockShelves: false,
 };
 
 export function childThreadSortOf(
@@ -127,6 +130,7 @@ function readStoredSidebarSettings(): SidebarSettingsValues | null {
       ...childThreadSettingsOf(value),
       compactWorkingThreads: value.compactWorkingThreads === true,
       workingShelf: value.workingShelf === true,
+      dockShelves: value.dockShelves === true,
     } as SidebarSettingsValues;
   } catch {
     return null;

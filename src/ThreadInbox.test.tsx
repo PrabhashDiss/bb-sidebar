@@ -59,6 +59,7 @@ const defaultSidebarSettings = {
   childIconStyle: "disc",
   compactWorkingThreads: false,
   workingShelf: false,
+  dockShelves: false,
 };
 
 function thread(
@@ -4495,6 +4496,40 @@ describe("parking threads", () => {
             .classList.contains("h-8"),
         ).toBe(false);
       }
+    },
+  );
+
+  it.each([true, false])(
+    "docks the shelves after Active to the bottom when enabled (%s)",
+    async (dockShelves) => {
+      renderSlot(inbox, listProps, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "open", title: "Open work" }),
+            thread({ id: "done", title: "Settled work" }),
+          ],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+        },
+        rpc: {
+          getSidebarSettings: () => ({
+            ...defaultSidebarSettings,
+            inactiveThreadsEnabled: false,
+            dockShelves,
+          }),
+          listLifecycle: () => ({ rows: [{
+            threadId: "done", settledAt: Date.now(), settledOverride: "settled",
+            snoozedUntil: null, snoozedAt: null,
+          }] }),
+        },
+      });
+      const settled = await screen.findByRole("region", { name: "Settled" });
+      const active = screen.getByRole("region", { name: "Active" });
+      await waitFor(() =>
+        expect(settled.closest("[data-shelf-dock]") !== null).toBe(dockShelves),
+      );
+      // Active never moves into the dock; it scrolls in the space above.
+      expect(active.closest("[data-shelf-dock]")).toBeNull();
     },
   );
 

@@ -227,6 +227,7 @@ describe("lifecycle RPC", () => {
       childIconStyle: "disc",
       compactWorkingThreads: false,
       workingShelf: false,
+      dockShelves: false,
     });
     await expect(
       harness.behavior.callRpc("updateSidebarSettings", {
@@ -242,6 +243,7 @@ describe("lifecycle RPC", () => {
         childIconStyle: "provider",
         compactWorkingThreads: true,
         workingShelf: true,
+        dockShelves: true,
       }),
     ).resolves.toEqual({
       snoozePresets: "10m, 4h",
@@ -256,6 +258,7 @@ describe("lifecycle RPC", () => {
       childIconStyle: "provider",
       compactWorkingThreads: true,
       workingShelf: true,
+      dockShelves: true,
     });
     // A client that predates the setting leaves it out and must not reset it.
     await expect(
@@ -271,7 +274,7 @@ describe("lifecycle RPC", () => {
         childSortDirection: "descending",
         childIconStyle: "provider",
       }),
-    ).resolves.toMatchObject({ compactWorkingThreads: true, workingShelf: true });
+    ).resolves.toMatchObject({ compactWorkingThreads: true, workingShelf: true, dockShelves: true });
     expect(harness.inspection.realtimeSignals).toContainEqual({
       channel: "sidebar-settings",
       payload: {},
@@ -352,6 +355,7 @@ describe("lifecycle RPC", () => {
       childIconStyle: "disc",
       compactWorkingThreads: false,
       workingShelf: false,
+      dockShelves: false,
     });
   });
 

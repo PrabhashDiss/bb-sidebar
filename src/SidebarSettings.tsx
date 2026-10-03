@@ -70,6 +70,7 @@ const SECTION_BY_SETTING: Record<keyof SidebarSettingsValues, string> = {
   childIconStyle: "Child threads",
   compactWorkingThreads: "Experimental",
   workingShelf: "Experimental",
+  dockShelves: "Experimental",
 };
 
 /**
@@ -458,6 +459,17 @@ export function SidebarSettings() {
               label="Working shelf"
               checked={draft.workingShelf}
               onChange={(checked) => update("workingShelf", checked)}
+            />
+          }
+        />
+        <SettingRow
+          title="Dock shelves to the bottom"
+          description="Keep every shelf below Active at the bottom of the sidebar, below the space Pinned and Active leave free. An open shelf that needs more room extends the list, and everything scrolls together."
+          control={
+            <Switch
+              label="Dock shelves to the bottom"
+              checked={draft.dockShelves}
+              onChange={(checked) => update("dockShelves", checked)}
             />
           }
         />

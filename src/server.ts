@@ -96,6 +96,8 @@ const migrations = [
      ADD COLUMN compact_working_threads INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE sidebar_settings
      ADD COLUMN working_shelf INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE sidebar_settings
+     ADD COLUMN dock_shelves INTEGER NOT NULL DEFAULT 0`,
 ];
 
 export interface StoredLifecycleRow {
@@ -129,6 +131,7 @@ interface SidebarSettingsDbRow {
   child_icon_style: string;
   compact_working_threads: number;
   working_shelf: number;
+  dock_shelves: number;
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
@@ -185,6 +188,7 @@ const sidebarSettingsSchema = z
     childIconStyle: z.enum(CHILD_THREAD_ICON_STYLES),
     compactWorkingThreads: z.boolean(),
     workingShelf: z.boolean(),
+    dockShelves: z.boolean(),
   })
   .strict();
 const uploadFilenameSchema = z
@@ -253,6 +257,7 @@ export const bbSidebarRpcContract = defineRpcContract({
     input: sidebarSettingsSchema.partial({
       compactWorkingThreads: true,
       workingShelf: true,
+      dockShelves: true,
     }),
     output: sidebarSettingsSchema,
   },
@@ -503,7 +508,7 @@ export default async function plugin(bb: BbPluginApi) {
                 auto_settle_inactive,
                 auto_settle_after_days, auto_settle_on_merge,
                 child_sort_field, child_sort_direction, child_icon_style,
-                compact_working_threads, working_shelf
+                compact_working_threads, working_shelf, dock_shelves
            FROM sidebar_settings
           WHERE id = 1`,
       )
@@ -525,6 +530,7 @@ export default async function plugin(bb: BbPluginApi) {
           }),
           compactWorkingThreads: row.compact_working_threads === 1,
           workingShelf: row.working_shelf === 1,
+          dockShelves: row.dock_shelves === 1,
         }
       : { ...DEFAULT_SIDEBAR_SETTINGS };
   };
@@ -536,8 +542,8 @@ export default async function plugin(bb: BbPluginApi) {
          auto_settle_inactive,
          auto_settle_after_days, auto_settle_on_merge,
          child_sort_field, child_sort_direction, child_icon_style,
-         compact_working_threads, working_shelf
-       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         compact_working_threads, working_shelf, dock_shelves
+       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          snooze_presets = excluded.snooze_presets,
          inactive_threads_enabled = excluded.inactive_threads_enabled,
@@ -551,7 +557,8 @@ export default async function plugin(bb: BbPluginApi) {
          child_sort_direction = excluded.child_sort_direction,
          child_icon_style = excluded.child_icon_style,
          compact_working_threads = excluded.compact_working_threads,
-         working_shelf = excluded.working_shelf`,
+         working_shelf = excluded.working_shelf,
+         dock_shelves = excluded.dock_shelves`,
     ).run(
       values.snoozePresets,
       values.inactiveThreadsEnabled ? 1 : 0,
@@ -565,6 +572,7 @@ export default async function plugin(bb: BbPluginApi) {
       values.childIconStyle,
       values.compactWorkingThreads ? 1 : 0,
       values.workingShelf ? 1 : 0,
+      values.dockShelves ? 1 : 0,
     );
   };
 
@@ -620,6 +628,7 @@ export default async function plugin(bb: BbPluginApi) {
         childIconStyle: DEFAULT_SIDEBAR_SETTINGS.childIconStyle,
         compactWorkingThreads: DEFAULT_SIDEBAR_SETTINGS.compactWorkingThreads,
         workingShelf: DEFAULT_SIDEBAR_SETTINGS.workingShelf,
+        dockShelves: DEFAULT_SIDEBAR_SETTINGS.dockShelves,
       });
       if (hasLegacyValues && migrated.success) {
         writeSidebarSettings(migrated.data);
@@ -1285,6 +1294,7 @@ export default async function plugin(bb: BbPluginApi) {
         compactWorkingThreads:
           values.compactWorkingThreads ?? stored.compactWorkingThreads,
         workingShelf: values.workingShelf ?? stored.workingShelf,
+        dockShelves: values.dockShelves ?? stored.dockShelves,
       });
       bb.realtime.publish(SIDEBAR_SETTINGS_CHANNEL, {});
       void evaluatePolicies().catch((error) => {
