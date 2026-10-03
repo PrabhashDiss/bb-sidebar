@@ -1,11 +1,13 @@
 # Changelog
 
-## Unreleased
+## [0.2.30] - 2026-10-03
 
 ### Fixed
 
 - **Regenerate title** reuses the thread's workspace instead of creating a personal workspace that can stall during setup. Selecting Codex for thread titles now uses a lightweight Codex helper, including for threads running through a custom provider. Turning thread titles off disables regeneration.
+- An unnamed thread gets one background title recovery attempt after BB's initial naming request. Recovery follows the selected AI title service, respects Off, and preserves successful or manually edited titles. Codex recovery allows up to 45 seconds for its helper to finish. Attempts are remembered across plugin reloads, with at most two running at once. This provides recovery while [BB's Codex stream issue](https://github.com/get-bb/bb/issues/4828) is investigated.
 - Selecting **bb cloud** for sidebar title regeneration now sends the last three user messages to bb cloud through the public account RPC. Automatic tries services in BB's advertised order, with cloud first. Explicit selections keep the existing title on failure and never switch to another service. Unsupported services show an error.
+- Pull-request lookups run only while their thread card is visible in the sidebar. Initial automatic-settle evaluation is preserved. Thanks to @amrtawfik160 for [#5](https://github.com/yusuf8834/bb-sidebar/pull/5).
 
 ## [0.2.29] - 2026-10-03
 

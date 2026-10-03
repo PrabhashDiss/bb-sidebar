@@ -6,6 +6,10 @@ type Row = Timeline["rows"][number];
 const MESSAGE_LIMIT = 3;
 const MESSAGE_CHAR_LIMIT = 8_000;
 
+export interface TitleGenerationOptions {
+  onlyIfUntitled?: boolean;
+}
+
 function userRows(rows: readonly Row[]): Row[] {
   return rows
     .flatMap((row) =>
@@ -170,8 +174,13 @@ export function createTitleRegenerator(bb: BbPluginApi) {
     return title;
   }
 
-  async function generate(threadId: string) {
+  async function generate(threadId: string, options: TitleGenerationOptions) {
     const original = await bb.sdk.threads.get({ threadId });
+    if (options.onlyIfUntitled && original.title !== null)
+      throw new Error("The thread already has a title");
+    if (options.onlyIfUntitled && (original.visibility !== "visible" ||
+        original.archivedAt !== null || original.deletedAt !== null))
+      throw new Error("The thread is no longer available for automatic naming");
     const messages = await lastUserMessages(bb, threadId);
     if (!messages.some(Boolean))
       throw new Error("This thread has no user-message text to generate a title from");
@@ -206,19 +215,29 @@ export function createTitleRegenerator(bb: BbPluginApi) {
     }
     if (!title) throw failure;
     controller.signal.throwIfAborted();
+    if (options.onlyIfUntitled) {
+      const latest = (await bb.sdk.system.aiServices({ signal: controller.signal }))
+        .selections["thread-title"];
+      if (latest.mode !== selection.mode || (latest.mode === "service" &&
+          selection.mode === "service" && (latest.pluginId !== selection.pluginId ||
+            latest.serviceId !== selection.serviceId)))
+        throw new Error("Thread title settings changed while generating");
+    }
     const current = await bb.sdk.threads.get({ threadId });
     if (current.title !== original.title)
       throw new Error(
         "The title changed while generating. Your newer title was kept.",
       );
+    if (options.onlyIfUntitled && (current.archivedAt !== null || current.deletedAt !== null))
+      throw new Error("The thread is no longer available for automatic naming");
     await bb.sdk.threads.update({ threadId, title });
     return { title };
   }
 
-  return (threadId: string) => {
+  return (threadId: string, options: TitleGenerationOptions = {}) => {
     const existing = pending.get(threadId);
     if (existing) return existing;
-    const task = generate(threadId).finally(() => pending.delete(threadId));
+    const task = generate(threadId, options).finally(() => pending.delete(threadId));
     pending.set(threadId, task);
     return task;
   };

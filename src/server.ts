@@ -21,6 +21,7 @@ import {
   type ReclaimSummary,
 } from "./reclaim";
 import { createTitleRegenerator } from "./regenerate-title";
+import { AUTO_TITLE_RECOVERY_MIGRATION, createAutoTitleRecovery } from "./auto-title";
 import {
   PROJECT_ICON_CANDIDATES,
   PROJECT_ICONS_CHANNEL,
@@ -99,6 +100,7 @@ const migrations = [
      ADD COLUMN working_shelf INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE sidebar_settings
      ADD COLUMN dock_shelves INTEGER NOT NULL DEFAULT 0`,
+  AUTO_TITLE_RECOVERY_MIGRATION,
 ];
 
 export interface StoredLifecycleRow {
@@ -532,6 +534,7 @@ export default async function plugin(bb: BbPluginApi) {
   const regenerateTitle = createTitleRegenerator(bb);
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
+  createAutoTitleRecovery(bb, regenerateTitle);
 
   const readSidebarSettings = (): SidebarSettingsValues => {
     const row = db

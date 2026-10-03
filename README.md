@@ -23,6 +23,7 @@ A stable thread list for [bb](https://github.com/get-bb/bb). Threads stay where 
 - Native bb navigation, split, rename, archive, and delete flows
 - Project submenu on thread cards for settings, rename, local paths, and removal
 - Regenerate a thread title from its last three accepted user messages
+- Automatically retry missing thread titles once in the background, respecting the selected AI title service and manual edits
 
 ## Install
 
