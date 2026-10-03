@@ -340,12 +340,7 @@ export function ChildThreadList({
               id={descendantsId}
               aria-label={`${listLabel} of ${threadDisplayTitle(child)}`}
               data-grandchild-thread-list={depth === 1 ? variant : undefined}
-              className={cn(
-                "flex flex-col",
-                variant === "header"
-                  ? "ml-5 border-l border-border pl-1"
-                  : "ml-3 border-l-[1.5px] border-border pl-2",
-              )}
+              className="ml-3 flex flex-col border-l border-border"
             >
               {renderRows(visibleDescendants, depth + 1, path)}
             </ul>
@@ -363,8 +358,8 @@ export function ChildThreadList({
       className={cn(
         "flex flex-col",
         variant === "header"
-          ? "gap-px p-1.5 pt-0.5"
-          : "ml-2.5 mt-1 border-l-[1.5px] border-border pl-1",
+          ? "mb-1.5 ml-1.75 mr-1.5 mt-0.5"
+          : "ml-4 mt-1 border-l border-border",
       )}
     >
       {renderRows(visibleThreads, 1, new Set())}
@@ -465,16 +460,18 @@ function ChildThreadRow({
                   ? "cursor-grab active:cursor-grabbing"
                   : "cursor-pointer",
               variant === "header"
-                ? "gap-2 rounded-md px-2 py-1.5"
-                : "h-full gap-2 rounded-md pl-2",
+                ? "gap-1.25 rounded-md py-1.5 pl-1.25 pr-1.5"
+                : "h-full gap-1.25 rounded-md pl-1.25",
             )}
           >
-            <ChildThreadIcon
-              thread={thread}
-              discClassName={
-                variant === "header" ? undefined : "size-2 border-0"
-              }
-            />
+            <span className="flex size-3.5 shrink-0 items-center justify-center">
+              <ChildThreadIcon
+                thread={thread}
+                discClassName={
+                  variant === "header" ? undefined : "size-2 border-0"
+                }
+              />
+            </span>
             <span
               className={cn(
                 "min-w-0 flex-1 text-xs",
@@ -562,14 +559,18 @@ function GrandchildDisclosureButton({
           event.stopPropagation();
           onToggle();
         }}
-        className="mr-1 flex h-5 shrink-0 items-center gap-0.5 rounded px-1 font-mono text-2xs tabular-nums text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+        className="group mr-1 flex h-6 min-w-9 shrink-0 items-center justify-center rounded-full bg-transparent px-0.5 outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
-        <span>{count}</span>
-        <Icon
-          name={expanded ? "ChevronUp" : "ChevronDown"}
-          className="size-3"
-          aria-hidden
-        />
+        <span className="inline-flex h-4.5 min-w-8 items-center justify-center gap-0.5 rounded-full bg-muted px-1 text-muted-foreground group-hover:bg-accent group-hover:text-foreground group-focus-visible:bg-accent group-focus-visible:text-foreground">
+          <span className="min-w-2.5 text-center font-sans text-2xs font-medium tabular-nums">
+            {count}
+          </span>
+          <Icon
+            name={expanded ? "ChevronUp" : "ChevronDown"}
+            className="size-3"
+            aria-hidden
+          />
+        </span>
       </button>
     </Tooltip>
   );

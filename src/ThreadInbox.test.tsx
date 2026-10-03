@@ -1514,7 +1514,7 @@ describe("ThreadInbox", () => {
     expect(navigated).toBe(1);
   });
 
-  it("shows a capped child badge only on parent cards", () => {
+  it("shows a child count badge with provider dots only on parent cards", () => {
     const minute = Math.floor(Date.now() / 60_000) * 60_000;
     render([
       thread({
