@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-bb-sidebar",
-  "version": "0.2.30",
+  "version": "0.2.31",
   "type": "module",
   "description": "A bb thread sidebar with manual and automatic sorting, snooze, and settle actions.",
   "license": "MIT",
@@ -56,7 +56,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@get-bb/plugin-sdk": "0.6.16",
+    "@get-bb/plugin-sdk": "0.6.15",
     "@pierre/diffs": "^1.2.9",
     "@radix-ui/react-alert-dialog": "^1.1.19",
     "@radix-ui/react-context-menu": "^2.3.3",
@@ -72,7 +72,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
-    "bb-app": "0.44.1-nightly.36895179611.1",
+    "bb-app": "0.45.0",
     "better-sqlite3": "12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

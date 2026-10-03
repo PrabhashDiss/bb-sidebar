@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.31] - 2026-10-03
+
+### Fixed
+
+- Matched the development SDK to the stable BB build tools so the extension's SDK check passes in CI.
+
 ## [0.2.30] - 2026-10-03
 
 ### Fixed
