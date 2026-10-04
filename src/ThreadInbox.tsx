@@ -85,6 +85,7 @@ import {
 } from "./project-icons";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
 import { isWorkingTree } from "./working-tree";
+import { pickWorkingEmptyLine } from "./working-empty-lines";
 import "./working-empty-state.css";
 import { SCROLL_FADE_CLASS, useScrollFade } from "./useScrollFade";
 import {
@@ -1880,6 +1881,8 @@ function ActiveEmptyState() {
  * away behind a laptop. The motion lives in working-empty-state.css.
  */
 function WorkingEmptyState() {
+  // Drawn on mount, so the line changes between appearances, never while shown.
+  const [line] = useState(() => pickWorkingEmptyLine());
   return (
     <div
       role="status"
@@ -1962,7 +1965,7 @@ function WorkingEmptyState() {
         </g>
       </svg>
       <p className="text-xs font-medium text-foreground/75">
-        Everyone's busy. Go grab a coffee.
+        {line}
       </p>
     </div>
   );

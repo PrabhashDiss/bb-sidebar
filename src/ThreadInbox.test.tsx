@@ -13,6 +13,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import { idleSidebarThreadFields } from "./test-fixtures";
 import { DEFAULT_SNOOZE_PRESET_CONFIG, formatSnoozeWakeTime } from "./lifecycle";
 import { isWorkingTree } from "./working-tree";
+import { WORKING_EMPTY_LINES } from "./working-empty-lines";
 import type { SidebarProvider } from "./ProviderGlyph";
 
 const toastMocks = vi.hoisted(() => ({
@@ -4844,7 +4845,8 @@ describe("ThreadInbox", () => {
         listLifecycle: () => ({ rows: [] }),
       },
     });
-    expect(await screen.findByText("Everyone's busy. Go grab a coffee.")).toBeDefined();
+    const lines: readonly string[] = WORKING_EMPTY_LINES;
+    expect(await screen.findByText((text) => lines.includes(text))).toBeDefined();
     expect(screen.queryByText("All clear. Time to touch some grass.")).toBeNull();
   });
 });
