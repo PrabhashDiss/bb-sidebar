@@ -1857,7 +1857,7 @@ describe("pin/parent policy", () => {
     expect(harness.inspection.sdk.callsTo("threads.pin")).toHaveLength(2);
   });
 
-  it("keeps Pin idempotent for an existing pinned root", async () => {
+  it("accepts Pin for an existing pinned root with pinnedAt=0", async () => {
     const harness = await loadPlugin();
     harness.inspection.sdk.stub("threads.get", async () => makeThreadResponse({ id: "root", pinnedAt: 0 }));
     await expect(harness.behavior.callRpc("pin", { threadId: "root" })).resolves.toEqual({ ok: true });
