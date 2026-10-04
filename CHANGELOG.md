@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.32] - 2026-10-04
+
+### Added
+
+- A child thread in a different project from its parent shows that project's icon in the sidebar tree, and the project's name in the header's Children popover.
+- Child threads at any depth can be dragged into the composer as a thread reference, or into the workspace to open a pane, like root threads. This also works from the Subthreads list in the hover card. Dragging keeps the child's parent.
+- Thread trees show the full hierarchy, including great-grandchildren and deeper, and every level counts toward the parent card's status badge.
+
+### Changed
+
+- Dragging to reorder slides the other rows and project groups out of the way, and a row moves as soon as the pointer enters the next one. Reduced motion turns the animation off.
+- With **Show children that need attention** on, collapsed shelves and projects keep a parent visible while one of its descendants needs attention.
+- Child rows are more compact and line up under their parent's icon. The count and chevron disclosure is a larger pill.
+
+### Fixed
+
+- Pinned threads keep bb's global pin order when grouped by project, and reordering places a pin between the right neighbours.
+- Only root threads can be pinned. Assigning a different parent unpins a thread; choosing None keeps it pinned.
+- When a parent and child are in different projects, project filters and collapsed shelves keep the open thread or its nearest visible parent reachable.
+
+Thanks to @a-kras for [#6](https://github.com/yusuf8834/bb-sidebar/pull/6).
+
 ## [0.2.31] - 2026-10-03
 
 ### Fixed
