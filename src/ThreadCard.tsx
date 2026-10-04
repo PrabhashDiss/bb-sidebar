@@ -490,7 +490,7 @@ export function ThreadCard({
                       <SnoozeSelect
                         label="Snooze thread"
                         snoozePresets={snoozePresets}
-                        triggerClassName="h-5 w-5 border-0 px-0.5 py-0 shadow-none hover:bg-transparent focus:ring-0 [&>svg:last-child]:size-3"
+                        triggerClassName="h-5 w-5 border-0 px-0.5 py-0 shadow-none duration-200 ease-out hover:bg-transparent hover:duration-200 hover:text-[color:var(--bb-sidebar-snooze-active)] focus:ring-0 focus-visible:text-[color:var(--bb-sidebar-snooze-active)] data-[state=open]:text-[color:var(--bb-sidebar-snooze-active)] motion-reduce:transition-none [&>svg:last-child]:size-3"
                         onOpenChange={setIsSnoozeOpen}
                         onSnooze={onSnooze}
                         onPark={onPark}
