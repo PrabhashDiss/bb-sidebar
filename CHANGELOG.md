@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.33] - 2026-10-04
+
+### Added
+
+- A thread with an unsent message in its composer shows **Draft** in place of its age, or **Drafting** while it works, as bb's own sidebar does. Failures, questions, unread results, and queued messages still take precedence.
+- With the Working shelf on, Active shows an animated scene when every thread is working.
+
 ## [0.2.32] - 2026-10-04
 
 ### Added
