@@ -38,6 +38,18 @@ import { OpenPortsIndicator } from "./OpenPorts";
 import { JumpHint, useJumpHint } from "./JumpHints";
 import "./settle-button.css";
 
+/** How long the settle sweep plays before the thread actually moves. */
+const SETTLE_SWEEP_MS = 520;
+/** A settle that worked has unmounted the card by now; one that failed has not. */
+const SETTLE_RECOVER_MS = 4_000;
+
+function shouldAnimateSettle(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 export interface ThreadReorderControls {
   disabled: boolean;
   isDragging: boolean;
@@ -154,6 +166,34 @@ export function ThreadCard({
   }, [thread.id]);
   const compactAtRenameStart = useRef(false);
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
+  const settleTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (settleTimer.current !== null) window.clearTimeout(settleTimer.current);
+    },
+    [],
+  );
+  // The sweep plays before the settle is sent, so the row leaves in its
+  // finished state instead of vanishing under the cursor.
+  const startSettle = () => {
+    if (isSettling) return;
+    if (!shouldAnimateSettle()) {
+      onSettle();
+      return;
+    }
+    setIsSettling(true);
+    settleTimer.current = window.setTimeout(() => {
+      onSettle();
+      settleTimer.current = window.setTimeout(
+        () => setIsSettling(false),
+        SETTLE_RECOVER_MS,
+      );
+    }, SETTLE_SWEEP_MS);
+  };
+  // The sweep keeps the actions up, as an open snooze menu does, so the check
+  // it starts from does not disappear when the cursor leaves the row.
+  const holdParkActions = isSnoozeOpen || isSettling;
   const childListId = useId();
   const liveStatus = threadShortStatus(thread)?.showsDuration === true;
   // A thread stays folded until everything under it is done; it unfolds at
@@ -210,6 +250,7 @@ export function ThreadCard({
   const titleLine = (
     <div
       data-row-emphasis={emphasis}
+      data-settle-fade=""
       className={cn(
         "pointer-events-none relative truncate text-sm",
         showProject ? "mt-0.5" : "min-w-0 flex-1",
@@ -234,7 +275,7 @@ export function ThreadCard({
       canArchive={canPark}
       snoozePresets={snoozePresets}
       onSnooze={onSnooze}
-      onSettle={canPark ? onSettle : undefined}
+      onSettle={canPark ? startSettle : undefined}
       onRename={() => changeRenaming(true)}
     >
       <li
@@ -250,6 +291,7 @@ export function ThreadCard({
         <div data-drag-visual="">
           <div
             data-parent-card=""
+            data-settling={isSettling ? "" : undefined}
             className={cn(
               "group/card relative rounded-md px-2.5 transition-colors duration-150 ease-out motion-reduce:transition-none",
               compact ? "flex h-8 items-center gap-2 text-xs" : "py-2",
@@ -266,6 +308,9 @@ export function ThreadCard({
                 "bg-[linear-gradient(var(--sidebar-accent),var(--sidebar-accent)),linear-gradient(var(--sidebar),var(--sidebar))] shadow-lg ring-1 ring-sidebar-border",
             )}
           >
+            {isSettling ? (
+              <span aria-hidden="true" className="bb-sidebar-settle-sweep" />
+            ) : null}
             <ThreadDetailsTooltip thread={thread} disabled={isRenaming || !!reorder?.isDragging}>
               <a
                 // Both attributes, or bb's nine thread shortcuts stop finding rows.
@@ -308,6 +353,7 @@ export function ThreadCard({
             {compact ? (
               <>
                 <span
+                  data-settle-fade=""
                   className={cn(
                     "pointer-events-none relative flex min-w-0 flex-1 items-center gap-1",
                     isRenaming && "pointer-events-auto",
@@ -366,7 +412,10 @@ export function ThreadCard({
             <>
             <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
               {showProject ? (
-                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground">
+                <span
+                  data-settle-fade=""
+                  className="flex min-w-0 flex-1 items-center gap-1.5 text-2xs font-medium text-muted-foreground"
+                >
                   {projectName ? (
                     <ProjectFavicon src={projectIconUrl} name={projectName} className="size-3" />
                   ) : null}
@@ -414,7 +463,7 @@ export function ThreadCard({
                     !showProject &&
                       showParkActions &&
                       "[@media(hover:hover)]:group-hover/card:min-w-11 has-[:focus-visible]:min-w-11",
-                    !showProject && isSnoozeOpen && "min-w-11",
+                    !showProject && holdParkActions && "min-w-11",
                   )}
                 >
                   <span
@@ -423,7 +472,7 @@ export function ThreadCard({
                       showParkActions &&
                         "[@media(hover:hover)]:group-hover/card:opacity-0 [@media(hover:hover)]:group-has-[:focus-visible]/status-slot:opacity-0 [@media(hover:none)]:static [@media(hover:none)]:opacity-100",
                       showParkActions && showProject && "absolute inset-y-0 right-0",
-                      isSnoozeOpen &&
+                      holdParkActions &&
                         "opacity-0 [@media(hover:none)]:opacity-100",
                     )}
                   >
@@ -434,7 +483,7 @@ export function ThreadCard({
                     <span
                       className={cn(
                         "pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 motion-reduce:transition-none",
-                        isSnoozeOpen && "pointer-events-auto opacity-100",
+                        holdParkActions && "pointer-events-auto opacity-100",
                       )}
                     >
                       {unpinButton}
@@ -448,7 +497,8 @@ export function ThreadCard({
                       />
                       <ParkButton
                         label="Settle thread"
-                        onActivate={onSettle}
+                        settling={isSettling}
+                        onActivate={startSettle}
                       />
                     </span>
                   ) : null}
@@ -456,7 +506,10 @@ export function ThreadCard({
               )}
             </div>
             {showProject ? titleLine : null}
-            <div className="pointer-events-none relative mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
+            <div
+              data-settle-fade=""
+              className="pointer-events-none relative mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground"
+            >
               {/* A thread without a worktree still runs somewhere, so the
                   machine takes the branch's place rather than leaving the line
                   blank. */}
@@ -589,49 +642,42 @@ function ThreadPullRequest({ threadId }: { threadId: string }) {
 
 function ParkButton({
   label,
+  settling,
   onActivate,
 }: {
   label: string;
+  settling: boolean;
   onActivate: () => void;
 }) {
   return (
     <button
       type="button"
       aria-label={label}
+      data-settling={settling ? "" : undefined}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
         onActivate();
       }}
       className={cn(
-        "bb-sidebar-settle group/settle relative flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground",
+        "bb-sidebar-settle relative flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground",
         "transition-colors duration-200 ease-out hover:text-[color:var(--bb-sidebar-settle-active)]",
         "focus-visible:text-[color:var(--bb-sidebar-settle-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50",
         "motion-reduce:transition-none",
+        settling && "text-[color:var(--bb-sidebar-settle-active)]",
       )}
     >
       {/* Move only the artwork so hovering an edge cannot move the hit area. */}
       <span
         aria-hidden="true"
-        className={cn(
-          "pointer-events-none relative flex size-full items-center justify-center rounded-[inherit]",
-          "transition-[background-color,box-shadow,transform] duration-200 ease-out motion-reduce:transition-none",
-          "group-hover/settle:bg-emerald-500/15 group-hover/settle:shadow-[0_0_0_3px_rgb(16_185_129_/_0.08)] group-focus-visible/settle:bg-emerald-500/15",
-          "motion-safe:group-hover/settle:-translate-y-0.5 motion-safe:group-focus-visible/settle:-translate-y-0.5 motion-safe:group-active/settle:translate-y-0 motion-safe:group-active/settle:scale-90 group-active/settle:bg-emerald-500/25",
-        )}
+        className="bb-sidebar-settle-art pointer-events-none relative flex size-full items-center justify-center rounded-[inherit]"
       >
-        <Icon
-          name="Check"
-          aria-hidden
-          className="size-3.5 transition-transform duration-200 ease-out motion-safe:group-hover/settle:rotate-[-8deg] motion-safe:group-hover/settle:scale-110 motion-safe:group-focus-visible/settle:rotate-[-8deg] motion-safe:group-focus-visible/settle:scale-110 motion-reduce:transition-none"
-        />
-        {[0, 1, 2, 3, 4].map((sparkle) => (
-          <span
-            key={sparkle}
-            aria-hidden="true"
-            className="bb-sidebar-settle-sparkle"
-          />
-        ))}
+        <Icon name="Check" aria-hidden className="bb-sidebar-settle-check size-3.5" />
+        <span className="bb-sidebar-settle-stars">
+          {[0, 1, 2].map((star) => (
+            <span key={star} className="bb-sidebar-settle-star" />
+          ))}
+        </span>
       </span>
     </button>
   );

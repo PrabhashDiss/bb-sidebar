@@ -32,7 +32,10 @@
   --bb-sidebar-amber-700: var(--color-amber-700, oklch(55.5% 0.163 48.998));
   --bb-sidebar-amber-950: var(--color-amber-950, oklch(27.9% 0.077 45.635));
   --bb-sidebar-emerald-100: var(--color-emerald-100, oklch(95% 0.052 163.051));
+  --bb-sidebar-emerald-200: var(--color-emerald-200, oklch(90.5% 0.093 164.15));
   --bb-sidebar-emerald-300: var(--color-emerald-300, oklch(84.5% 0.143 164.978));
+  --bb-sidebar-emerald-400: var(--color-emerald-400, oklch(76.5% 0.177 163.223));
+  --bb-sidebar-emerald-500: var(--color-emerald-500, oklch(69.6% 0.17 162.48));
   --bb-sidebar-emerald-600: var(--color-emerald-600, oklch(59.6% 0.145 163.225));
   --bb-sidebar-emerald-700: var(--color-emerald-700, oklch(50.8% 0.118 165.612));
   --bb-sidebar-emerald-950: var(--color-emerald-950, oklch(26.2% 0.051 172.552));
@@ -96,6 +99,10 @@
   --bb-sidebar-needs-you-accent: transparent;
 
   --bb-sidebar-settle-active: var(--bb-sidebar-emerald-700);
+  /* The settle sweep's wash and glow, and the brighter sparkle over it. */
+  --bb-sidebar-settle-accent: var(--bb-sidebar-emerald-600);
+  --bb-sidebar-settle-spark: var(--bb-sidebar-emerald-500);
+  --bb-sidebar-settle-glint: color-mix(in oklab, white 35%, transparent);
 
   --bb-sidebar-pr-merged: var(--bb-sidebar-violet-600);
   --bb-sidebar-pr-alert: var(--bb-sidebar-red-600);
@@ -152,6 +159,10 @@
   --bb-sidebar-needs-you-accent: color-mix(in oklab, var(--bb-sidebar-amber-300) 55%, transparent);
 
   --bb-sidebar-settle-active: var(--bb-sidebar-emerald-300);
+  --bb-sidebar-settle-accent: var(--bb-sidebar-emerald-400);
+  --bb-sidebar-settle-spark: var(--bb-sidebar-emerald-200);
+  /* White would flash on a dark row; the glint stays a brighter green. */
+  --bb-sidebar-settle-glint: color-mix(in oklab, var(--bb-sidebar-emerald-200) 18%, transparent);
 
   --bb-sidebar-pr-merged: color-mix(in oklab, var(--bb-sidebar-violet-300) 90%, transparent);
   --bb-sidebar-pr-alert: color-mix(in oklab, var(--bb-sidebar-red-300) 90%, transparent);

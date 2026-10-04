@@ -5672,6 +5672,49 @@ describe("parking threads", () => {
     await waitFor(() => expect(settled).toBe("thr_park"));
   });
 
+  it("plays the settle sweep before settling, unless motion is reduced", async () => {
+    for (const reduced of [false, true]) {
+      vi.stubGlobal("matchMedia", (query: string) => ({
+        matches: reduced && query.includes("reduce"),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+      onTestFinished(() => {
+        vi.unstubAllGlobals();
+      });
+      let settled: string | null = null;
+      const rendered = renderSlot(inbox, listProps, {
+        sidebarThreads: {
+          status: "ready",
+          threads: [thread({ id: "thr_park", title: "Quiet" })],
+          projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+        },
+        rpc: {
+          listLifecycle: () => ({ rows: [] }),
+          settle: (input) => {
+            settled = (input as { threadId: string }).threadId;
+            return { ok: true, reclaim: SETTLED_NOTHING };
+          },
+        },
+      });
+      const button = await screen.findByLabelText("Settle thread");
+      fireEvent.click(button);
+      const card = button.closest("[data-parent-card]")!;
+      if (reduced) {
+        expect(card.hasAttribute("data-settling")).toBe(false);
+      } else {
+        expect(card.hasAttribute("data-settling")).toBe(true);
+        expect(card.querySelector(".bb-sidebar-settle-sweep")).not.toBeNull();
+        // A second click while the sweep plays is not a second settle.
+        fireEvent.click(button);
+        expect(settled).toBeNull();
+      }
+      await waitFor(() => expect(settled).toBe("thr_park"));
+      rendered.unmount();
+    }
+  });
+
   // A raised hand outranks a reported runtime in the slot, and it also
   // outranks any stored shelf: the row stays on Active with no park controls.
   it("prefers a pending question to a running indicator on a parent card", async () => {
