@@ -4827,6 +4827,26 @@ describe("ThreadInbox", () => {
     ).toBeDefined();
     expect(view.container.querySelector("svg")).not.toBeNull();
   });
+
+  it("shows a working scene when every thread is working", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "busy", title: "Busy work", indicator: "runtime" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      rpc: {
+        getSidebarSettings: () => ({
+          ...defaultSidebarSettings,
+          inactiveThreadsEnabled: false,
+          workingShelf: true,
+        }),
+        listLifecycle: () => ({ rows: [] }),
+      },
+    });
+    expect(await screen.findByText("Everyone's busy. Go grab a coffee.")).toBeDefined();
+    expect(screen.queryByText("All clear. Time to touch some grass.")).toBeNull();
+  });
 });
 
 describe("parking threads", () => {
