@@ -241,3 +241,9 @@
   background-color: var(--bb-sidebar-monogram-7-bg);
   color: var(--bb-sidebar-monogram-7-fg);
 }
+
+/* Animated cards must not obscure the stable li insertion slots. */
+[data-drag-preview] [data-drag-visual],
+[data-drag-preview] [data-drag-visual] * {
+  pointer-events: none !important;
+}

@@ -137,21 +137,21 @@ export function childStatusIndicator(
   }
 }
 
-/**
- * The children plus their children, so a grandchild that fails or asks for
- * input still surfaces on the card the user can see.
- */
+/** Visible descendants in sibling order; archived branches and cycles stop. */
 export function childSubtree(
   children: readonly PluginSidebarThread[],
   childrenByParent: ReadonlyMap<string, readonly PluginSidebarThread[]>,
 ): PluginSidebarThread[] {
   const result: PluginSidebarThread[] = [];
-  for (const child of children) {
-    if (child.isArchived) continue;
-    result.push(child);
-    for (const grandchild of childrenByParent.get(child.id) ?? []) {
-      if (!grandchild.isArchived) result.push(grandchild);
+  const visited = new Set<string>();
+  const visit = (siblings: readonly PluginSidebarThread[]) => {
+    for (const child of siblings) {
+      if (child.isArchived || visited.has(child.id)) continue;
+      visited.add(child.id);
+      result.push(child);
+      visit(childrenByParent.get(child.id) ?? []);
     }
-  }
+  };
+  visit(children);
   return result;
 }

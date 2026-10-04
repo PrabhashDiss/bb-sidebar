@@ -273,7 +273,7 @@ export const bbSidebarRpcContract = defineRpcContract({
   },
   setThreadParent: {
     input: threadIdSchema.extend({ parentThreadId: z.string().trim().min(1).nullable() }).strict(),
-    output: z.object({ ok: z.boolean() }),
+    output: z.object({ ok: z.boolean(), unpinFailed: z.literal(true).optional() }),
   },
   deleteThread: {
     input: threadIdSchema.extend({ childThreadsConfirmed: z.boolean() }).strict(),
@@ -1012,6 +1012,20 @@ export default async function plugin(bb: BbPluginApi) {
     return true;
   };
 
+  // Pin and reparent must not both validate the same old root state.
+  const pinParentChanges = new Set<string>();
+  const withPinParentChange = async <T>(threadId: string, change: () => Promise<T>): Promise<T> => {
+    if (pinParentChanges.has(threadId)) {
+      throw new Error("Thread update already in progress. Try again.");
+    }
+    pinParentChanges.add(threadId);
+    try {
+      return await change();
+    } finally {
+      pinParentChanges.delete(threadId);
+    }
+  };
+
   const readInboxOrder = (): string[] =>
     (
       db
@@ -1547,9 +1561,23 @@ export default async function plugin(bb: BbPluginApi) {
         : null;
     },
     async setThreadParent({ threadId, parentThreadId }) {
-      // BB validates parent relationships, including cycles.
-      await bb.sdk.threads.update({ threadId, parentThreadId });
-      return { ok: true };
+      return withPinParentChange(threadId, async () => {
+        const thread = await bb.sdk.threads.get({ threadId });
+        if (parentThreadId === thread.parentThreadId) return { ok: true };
+        // Validate the parent before unpinning: a rejected update must keep the pin.
+        await bb.sdk.threads.update({ threadId, parentThreadId });
+        if (parentThreadId != null && thread.pinnedAt != null) {
+          try {
+            await bb.sdk.threads.unpin({ threadId });
+          } catch (error) {
+            bb.log.error(
+              `Parent updated but unpinning failed for thread ${threadId}, parent ${parentThreadId}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return { ok: true, unpinFailed: true as const };
+          }
+        }
+        return { ok: true };
+      });
     },
     async deleteThread({ threadId, childThreadsConfirmed }) {
       // The sidebar shows its own confirmation naming the thread and project,
@@ -1583,17 +1611,23 @@ export default async function plugin(bb: BbPluginApi) {
       return { rows: readAll() };
     },
     async pin({ threadId }) {
-      // Preserve the previous shelf if the native pin fails.
-      await bb.sdk.threads.pin({ threadId });
-      write({
-        threadId,
-        parkedAt: null,
-        settledAt: null,
-        settledOverride: "active",
-        snoozedUntil: null,
-        snoozedAt: null,
+      return withPinParentChange(threadId, async () => {
+        const thread = await bb.sdk.threads.get({ threadId });
+        if (thread.parentThreadId != null) {
+          throw new Error("Child threads cannot be pinned");
+        }
+        // Preserve the previous shelf if the native pin fails.
+        await bb.sdk.threads.pin({ threadId });
+        write({
+          threadId,
+          parkedAt: null,
+          settledAt: null,
+          settledOverride: "active",
+          snoozedUntil: null,
+          snoozedAt: null,
+        });
+        return { ok: true };
       });
-      return { ok: true };
     },
     async park({ threadId }) {
       await bb.sdk.threads.unpin({ threadId });
