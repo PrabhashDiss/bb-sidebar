@@ -14,6 +14,7 @@ import {
   STATUS_SLOT_CLASS,
   StatusOrTime,
   threadStatusLabel,
+  useThreadWithDraft,
 } from "./StatusSlot";
 import { useWorkingSinceContext } from "./useWorkingSince";
 import { threadDisplayTitle } from "./inbox";
@@ -426,8 +427,9 @@ function ChildThreadRow({
   const needsYou = thread.hasPendingInteraction;
   const effectiveNow = now ?? Date.now();
   const workingSince = useWorkingSinceContext();
+  const statusThread = useThreadWithDraft(thread);
   const visibleStatus = threadStatusLabel(
-    thread,
+    statusThread,
     workingSince.get(thread.id),
     effectiveNow,
   );
@@ -534,8 +536,8 @@ function ChildThreadRow({
             {variant === "header" ? (
               <span className="shrink-0">
                 <StatusGlyph
-                  indicator={thread.indicator}
-                  label={thread.indicatorLabel}
+                  indicator={statusThread.indicator}
+                  label={statusThread.indicatorLabel}
                 />
               </span>
             ) : null}

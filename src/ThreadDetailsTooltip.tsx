@@ -14,6 +14,7 @@ import { threadDisplayTitle } from "./inbox";
 import { Icon, type IconName } from "./components/Icon";
 import { ProviderGlyph } from "./ProviderGlyph";
 import { StatusGlyph } from "./StatusGlyph";
+import { useThreadWithDraft } from "./StatusSlot";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { PROJECT_ICONS_CHANNEL, projectIconUrl } from "./project-icons";
 import { OpenPortDetails } from "./OpenPorts";
@@ -63,12 +64,13 @@ export function ThreadDetailsTooltip({
   }, [call, thread.id, visible]);
 
   const { sort: childSort } = useChildThreadDisplay();
+  const statusThread = useThreadWithDraft(thread);
   const provider = providers.find((entry) => entry.id === thread.providerId);
   const project = projects.find((entry) => entry.id === thread.projectId);
   const isWorktree =
     thread.environment?.workspaceDisplayKind === "managed-worktree" ||
     thread.environment?.workspaceDisplayKind === "unmanaged-worktree";
-  const status = thread.hasPendingInteraction ? "Needs you" : thread.indicatorLabel ?? "Idle";
+  const status = thread.hasPendingInteraction ? "Needs you" : statusThread.indicatorLabel ?? "Idle";
   const subthreads = visible ? threads
     .filter((child) => !child.isArchived && child.parentThreadId === thread.id && child.id !== thread.id)
     .sort(compareChildThreads(childSort)) : [];
@@ -98,9 +100,9 @@ export function ThreadDetailsTooltip({
         <div className="flex items-start gap-2">
           <span className="relative mt-px flex size-3.5 shrink-0 items-center justify-center">
             <ProviderGlyph providerId={thread.providerId} provider={provider ?? null} className="size-3.5 [&_span]:size-3.5" />
-            {thread.indicator !== "none" ? (
+            {statusThread.indicator !== "none" ? (
               <span className="absolute -bottom-1 -right-1 rounded-full bg-popover">
-                <StatusGlyph indicator={thread.indicator} label={status} className="size-2.5" />
+                <StatusGlyph indicator={statusThread.indicator} label={status} className="size-2.5" />
               </span>
             ) : null}
           </span>
@@ -165,7 +167,8 @@ function SubthreadRow({ thread, onOpen }: { thread: PluginSidebarThread; onOpen:
   const { splitProps } = experimental_useSidebarThreadSplit(thread.id);
   const { providers } = useProviders();
   const provider = providers.find((entry) => entry.id === thread.providerId);
-  const status = thread.hasPendingInteraction ? "Needs you" : thread.indicatorLabel ?? "Idle";
+  const statusThread = useThreadWithDraft(thread);
+  const status = thread.hasPendingInteraction ? "Needs you" : statusThread.indicatorLabel ?? "Idle";
   return (
     <button
       type="button"
@@ -188,7 +191,7 @@ function SubthreadRow({ thread, onOpen }: { thread: PluginSidebarThread; onOpen:
         <span className="block truncate">{threadDisplayTitle(thread)}</span>
         <span className="flex items-center gap-1 text-[11px] leading-4 text-muted-foreground">
           <span className="truncate">{provider?.displayName ?? thread.providerId} · {status}</span>
-          <StatusGlyph indicator={thread.hasPendingInteraction ? "waiting-for-input" : thread.indicator} label={null} className="size-2.5" />
+          <StatusGlyph indicator={thread.hasPendingInteraction ? "waiting-for-input" : statusThread.indicator} label={null} className="size-2.5" />
         </span>
       </span>
     </button>

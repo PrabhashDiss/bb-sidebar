@@ -7571,6 +7571,32 @@ describe("card metadata", () => {
     ]);
     expect(await screen.findByText("3h")).toBeDefined();
   });
+
+  // bb keeps unsent composer drafts out of `indicator`, so the row folds them
+  // in itself, in bb's order: a draft never hides a result you have not read.
+  it("marks threads holding an unsent draft", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "thr_idle", title: "Idle draft" }),
+          thread({ id: "thr_busy", title: "Busy draft", indicator: "runtime", indicatorLabel: "Thread working" }),
+          thread({ id: "thr_unread", title: "Unread draft", indicator: "unread-success", indicatorLabel: "Unread thread succeeded" }),
+          thread({ id: "thr_clean", title: "No draft", updatedAt: Date.now() - (3 * 3_600_000 + 60_000) }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
+      },
+      providers: { status: "ready", providers: defaultProviders },
+      rpc: { listLifecycle: () => ({ rows: [] }) },
+      sidebarDraftThreadIds: ["thr_idle", "thr_busy", "thr_unread"],
+    });
+    expect(await screen.findByLabelText("Thread has unsubmitted draft")).toBeDefined();
+    expect(screen.getByText("Draft").className).toContain("text-[color:var(--bb-sidebar-tone-draft)]");
+    expect(screen.getByLabelText("Thread working with unsubmitted draft")).toBeDefined();
+    expect(screen.getByText("Drafting")).toBeDefined();
+    expect(screen.getByText("Unread")).toBeDefined();
+    expect(screen.getByText("3h")).toBeDefined();
+  });
 });
 
 // The three states that need attention take the slot from the age label.

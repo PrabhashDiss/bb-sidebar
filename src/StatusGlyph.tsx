@@ -7,6 +7,7 @@ import {
   shortStatusLabel,
   statusToneClass,
   threadShortStatus,
+  useThreadWithDraft,
 } from "./StatusSlot";
 import { useWorkingSinceContext } from "./useWorkingSince";
 
@@ -190,13 +191,14 @@ function ShineIcon({
  * assistive tech; the duration is left off under a minute, as on the card.
  */
 export function CompactLiveStatus({
-  thread,
+  thread: listedThread,
   now,
 }: {
   thread: PluginSidebarThread;
   /** Quantized clock, shared by every row in one render. */
   now: number;
 }) {
+  const thread = useThreadWithDraft(listedThread);
   const workingSince = useWorkingSinceContext();
   const status = threadShortStatus(thread);
   if (status === null) return null;

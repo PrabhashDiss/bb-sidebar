@@ -1,7 +1,10 @@
-import type {
-  PluginSidebarThread,
-  PluginSidebarThreadIndicator,
+import {
+  useSidebarThreadDraft,
+  type PluginSidebarThread,
+  type PluginSidebarThreadIndicator,
 } from "@get-bb/plugin-sdk/app";
+import { useMemo } from "react";
+import { isWorkingIndicator } from "./child-status";
 import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
 import { useWorkingSinceContext } from "./useWorkingSince";
@@ -36,13 +39,14 @@ export const TRAILING_GLYPH_BOX_CLASS =
  * slot answers "is it stuck?" as well as "what is it doing?".
  */
 export function StatusOrTime({
-  thread,
+  thread: listedThread,
   now,
 }: {
   thread: PluginSidebarThread;
   /** Quantized clock, shared by every row in one render. */
   now: number;
 }) {
+  const thread = useThreadWithDraft(listedThread);
   const workingSince = useWorkingSinceContext();
   const status = threadShortStatus(thread);
   if (status !== null) {
@@ -67,6 +71,45 @@ export function StatusOrTime({
     <span className="tabular-nums text-2xs text-muted-foreground">
       {relativeTimeLabel(thread.updatedAt, now)}
     </span>
+  );
+}
+
+/**
+ * Folds an unsent composer draft into bb's indicator the way bb's own row
+ * does. bb leaves drafts out of `indicator` because they are per-client, so a
+ * busy thread with a draft becomes "working-draft" and an otherwise quiet one
+ * "draft". A failure, a raised hand, an unread result or a queued message
+ * keeps its own status.
+ */
+export function withDraftIndicator(
+  indicator: PluginSidebarThreadIndicator,
+  hasDraft: boolean,
+): PluginSidebarThreadIndicator {
+  if (!hasDraft) return indicator;
+  if (isWorkingIndicator(indicator)) return "working-draft";
+  return indicator === "none" ? "draft" : indicator;
+}
+
+/** The thread as its row should draw it, with this client's draft folded in. */
+export function useThreadWithDraft(
+  thread: PluginSidebarThread,
+): PluginSidebarThread {
+  const { hasUnsubmittedDraft } = useSidebarThreadDraft(thread.id);
+  const indicator = withDraftIndicator(thread.indicator, hasUnsubmittedDraft);
+  return useMemo(
+    () =>
+      indicator === thread.indicator
+        ? thread
+        : {
+            ...thread,
+            indicator,
+            // bb's own wording for the two draft glyphs.
+            indicatorLabel:
+              indicator === "draft"
+                ? "Thread has unsubmitted draft"
+                : "Thread working with unsubmitted draft",
+          },
+    [thread, indicator],
   );
 }
 
