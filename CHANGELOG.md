@@ -5,22 +5,24 @@
 ### Added
 
 - A child thread in a different project from its parent shows that project's icon in the sidebar tree, and the project's name in the header's Children popover.
-- Child threads at any depth can be dragged into the composer as a thread reference, or into the workspace to open a pane, like root threads. This also works from the Subthreads list in the hover card. Dragging keeps the child's parent.
-- Thread trees show the full hierarchy, including great-grandchildren and deeper, and every level counts toward the parent card's status badge.
+- Child threads at any depth can be dragged into the composer as a thread reference, or into the workspace to open a pane, like root threads. This also works from the Subthreads list in the hover card. Dragging keeps the child's parent ([#6](https://github.com/yusuf8834/bb-sidebar/pull/6) by [@a-kras](https://github.com/a-kras)).
+- Thread trees show the full hierarchy, including great-grandchildren and deeper, and every level counts toward the parent card's status badge ([#6](https://github.com/yusuf8834/bb-sidebar/pull/6) by [@a-kras](https://github.com/a-kras)).
 
 ### Changed
 
-- Dragging to reorder slides the other rows and project groups out of the way, and a row moves as soon as the pointer enters the next one. Reduced motion turns the animation off.
-- With **Show children that need attention** on, collapsed shelves and projects keep a parent visible while one of its descendants needs attention.
-- Child rows are more compact and line up under their parent's icon. The count and chevron disclosure is a larger pill.
+- Dragging to reorder slides the other rows and project groups out of the way, and a row moves as soon as the pointer enters the next one. Reduced motion turns the animation off ([#6](https://github.com/yusuf8834/bb-sidebar/pull/6) by [@a-kras](https://github.com/a-kras)).
+- With **Show children that need attention** on, collapsed shelves and projects keep a parent visible while one of its descendants needs attention ([#6](https://github.com/yusuf8834/bb-sidebar/pull/6) by [@a-kras](https://github.com/a-kras)).
+- Child rows are more compact and line up under their parent's icon. The count and chevron disclosure is a larger pill ([#6](https://github.com/yusuf8834/bb-sidebar/pull/6) by [@a-kras](https://github.com/a-kras)).
 
 ### Fixed
 
-- Pinned threads keep bb's global pin order when grouped by project, and reordering places a pin between the right neighbours.
-- Only root threads can be pinned. Assigning a different parent unpins a thread; choosing None keeps it pinned.
-- When a parent and child are in different projects, project filters and collapsed shelves keep the open thread or its nearest visible parent reachable.
+- Pinned threads keep bb's global pin order when grouped by project, and reordering places a pin between the right neighbours ([#6](https://github.com/yusuf8834/bb-sidebar/pull/6) by [@a-kras](https://github.com/a-kras)).
+- Only root threads can be pinned. Assigning a different parent unpins a thread; choosing None keeps it pinned ([#6](https://github.com/yusuf8834/bb-sidebar/pull/6) by [@a-kras](https://github.com/a-kras)).
+- When a parent and child are in different projects, project filters and collapsed shelves keep the open thread or its nearest visible parent reachable ([#6](https://github.com/yusuf8834/bb-sidebar/pull/6) by [@a-kras](https://github.com/a-kras)).
 
-Thanks to @a-kras for [#6](https://github.com/yusuf8834/bb-sidebar/pull/6).
+### Contributors
+
+- Thanks to [@a-kras](https://github.com/a-kras) for the pinning, reordering, drag-and-drop, and nested child-thread improvements in [#6](https://github.com/yusuf8834/bb-sidebar/pull/6).
 
 ## [0.2.31] - 2026-10-03
 
@@ -35,7 +37,11 @@ Thanks to @a-kras for [#6](https://github.com/yusuf8834/bb-sidebar/pull/6).
 - **Regenerate title** reuses the thread's workspace instead of creating a personal workspace that can stall during setup. Selecting Codex for thread titles now uses a lightweight Codex helper, including for threads running through a custom provider. Turning thread titles off disables regeneration.
 - An unnamed thread gets one background title recovery attempt after BB's initial naming request. Recovery follows the selected AI title service, respects Off, and preserves successful or manually edited titles. Codex recovery allows up to 45 seconds for its helper to finish. Attempts are remembered across plugin reloads, with at most two running at once. This provides recovery while [BB's Codex stream issue](https://github.com/get-bb/bb/issues/4828) is investigated.
 - Selecting **bb cloud** for sidebar title regeneration now sends the last three user messages to bb cloud through the public account RPC. Automatic tries services in BB's advertised order, with cloud first. Explicit selections keep the existing title on failure and never switch to another service. Unsupported services show an error.
-- Pull-request lookups run only while their thread card is visible in the sidebar. Initial automatic-settle evaluation is preserved. Thanks to @amrtawfik160 for [#5](https://github.com/yusuf8834/bb-sidebar/pull/5).
+- Pull-request lookups run only while their thread card is visible in the sidebar ([#5](https://github.com/yusuf8834/bb-sidebar/pull/5) by [@amrtawfik160](https://github.com/amrtawfik160)). Initial automatic-settle evaluation is preserved.
+
+### Contributors
+
+- Thanks to [@amrtawfik160](https://github.com/amrtawfik160) for finding that pull-request lookups for off-screen rows could delay other sidebar requests and contributing the fix in [#5](https://github.com/yusuf8834/bb-sidebar/pull/5).
 
 ## [0.2.29] - 2026-10-03
 
@@ -131,18 +137,20 @@ Thanks to @a-kras for [#6](https://github.com/yusuf8834/bb-sidebar/pull/6).
 
 ### Added
 
-- A **Child threads** settings section. **Sort** orders child threads by date created or last activity, ascending or descending, in the sidebar, the thread header popup, the parent's badge, and hover cards. **Child thread icon** shows a colour circle per thread (the default) or the agent's provider icon; with provider icons, the parent's badge shows each agent once. The defaults keep the previous look and oldest-first order.
+- A **Child threads** settings section. **Sort** orders child threads by date created or last activity, ascending or descending, in the sidebar, the thread header popup, the parent's badge, and hover cards. **Child thread icon** shows a colour circle per thread (the default) or the agent's provider icon; with provider icons, the parent's badge shows each agent once. The defaults keep the previous look and oldest-first order ([#3](https://github.com/yusuf8834/bb-sidebar/pull/3) by [@a-kras](https://github.com/a-kras)).
 
 ### Improved
 
-- The child-thread tree line sits under the parent's title, and child rows sit closer to it.
+- The child-thread tree line sits under the parent's title, and child rows sit closer to it ([#3](https://github.com/yusuf8834/bb-sidebar/pull/3) by [@a-kras](https://github.com/a-kras)).
 
 ### Fixed
 
-- A slow, older settings load arriving after a newer one no longer rolls the sidebar back to the previous settings.
+- A slow, older settings load arriving after a newer one no longer rolls the sidebar back to the previous settings ([#3](https://github.com/yusuf8834/bb-sidebar/pull/3) by [@a-kras](https://github.com/a-kras)).
 - The thread header's child-thread popup stays inside the window and scrolls a long list instead of running off screen.
 
-Thanks to [@a-kras](https://github.com/a-kras) for designing and contributing the child-thread settings and the settings-load fix in [#3](https://github.com/yusuf8834/bb-sidebar/pull/3).
+### Contributors
+
+- Thanks to [@a-kras](https://github.com/a-kras) for designing and contributing the Child threads settings (sort order and provider icons), the tighter child-thread indent, and the settings-load race fix in [#3](https://github.com/yusuf8834/bb-sidebar/pull/3).
 
 ## [0.2.21] - 2026-09-23
 
@@ -258,11 +266,13 @@ Thanks to [@a-kras](https://github.com/a-kras) for designing and contributing th
 
 ### Fixed
 
-- Keep snooze, settle, and restore actions visible on touch devices, with parked thread labels and snooze countdowns beside the restore button.
+- Keep snooze, settle, and restore actions visible on touch devices, with parked thread labels and snooze countdowns beside the restore button ([#2](https://github.com/yusuf8834/bb-sidebar/pull/2) by [@banjerluke](https://github.com/banjerluke)).
 - Group the unpin button with card actions, or with the status and Woke label when parking actions are unavailable.
 - Keep the status visible when focusing Unpin on cards without parking actions.
 
-Thanks to [@banjerluke](https://github.com/banjerluke) for contributing the touch-device fix in [#2](https://github.com/yusuf8834/bb-sidebar/pull/2).
+### Contributors
+
+- Thanks to [@banjerluke](https://github.com/banjerluke) for finding that row and card actions were unreachable on touch devices and contributing the fix in [#2](https://github.com/yusuf8834/bb-sidebar/pull/2).
 
 ## [0.2.11] - 2026-09-11
 
@@ -328,11 +338,13 @@ Thanks to [@banjerluke](https://github.com/banjerluke) for contributing the touc
 
 ### Fixed
 
-- Bounded the browser cache to 500 lifecycle records and 100 expanded-thread IDs to prevent unbounded storage growth.
-- Recovered from storage-quota errors by evicting sidebar caches one at a time, stopping as soon as the write succeeds to preserve remaining preferences.
+- Bounded the browser cache to 500 lifecycle records and 100 expanded-thread IDs to prevent unbounded storage growth ([#1](https://github.com/yusuf8834/bb-sidebar/pull/1) by [@elianiva](https://github.com/elianiva)).
+- Recovered from storage-quota errors by evicting sidebar caches one at a time, stopping as soon as the write succeeds to preserve remaining preferences ([#1](https://github.com/yusuf8834/bb-sidebar/pull/1) by [@elianiva](https://github.com/elianiva)).
 - Preserved expansion recency across restarts so pruning removes the oldest entries.
 
-Thanks to [@elianiva](https://github.com/elianiva) for identifying the storage issue and contributing the fix in [#1](https://github.com/yusuf8834/bb-sidebar/pull/1).
+### Contributors
+
+- Thanks to [@elianiva](https://github.com/elianiva) for finding the unbounded browser storage growth and contributing the cache limits and quota-error recovery in [#1](https://github.com/yusuf8834/bb-sidebar/pull/1).
 
 ## [0.2.5] - 2026-09-05
 
