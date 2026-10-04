@@ -1925,6 +1925,50 @@ describe("ThreadInbox", () => {
     ).toContain("bg-sidebar-accent");
   });
 
+  it("marks a child from another project than its parent", () => {
+    renderSlot(
+      inbox,
+      { ...listProps, activeThreadId: "grandchild" },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({
+              id: "child",
+              title: "Child",
+              projectId: "proj_2",
+              parentThreadId: "parent",
+            }),
+            thread({
+              id: "grandchild",
+              title: "Grandchild",
+              projectId: "proj_2",
+              parentThreadId: "child",
+            }),
+          ],
+          projects: [
+            { id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" },
+            { id: "proj_2", name: "xPlan", isPersonal: false, href: "", settingsHref: "" },
+          ],
+        },
+        rpc: { listLifecycle: () => ({ rows: [] }) },
+      },
+    );
+
+    const childRow = screen.getByRole("button", {
+      name: "Open child thread: Child, in project xPlan",
+    });
+    expect(
+      childRow.querySelector("[data-foreign-project]")?.getAttribute("data-foreign-project"),
+    ).toBe("proj_2");
+    // Same project as its own parent, so no mark.
+    const grandchildRow = screen.getByRole("button", {
+      name: "Open grandchild thread: Grandchild",
+    });
+    expect(grandchildRow.querySelector("[data-foreign-project]")).toBeNull();
+  });
+
   it("shows every child status or an idle age in expanded rows and accessible names", async () => {
     const minute = Math.floor(Date.now() / 60_000) * 60_000;
     window.localStorage.setItem(

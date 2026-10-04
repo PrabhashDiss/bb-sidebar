@@ -114,6 +114,9 @@ export function SubagentsChip({
             <ChildThreadList
               threads={children}
               childrenByParent={childrenByParent}
+              parentProjectId={
+                threads.find((thread) => thread.id === threadId)?.projectId
+              }
               variant="header"
               onOpenThread={(childId) => {
                 setOpen(false);

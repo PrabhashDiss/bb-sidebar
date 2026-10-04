@@ -1,6 +1,8 @@
 import { useId, useState, type ReactNode } from "react";
 import {
   experimental_useSidebarThreadSplit,
+  experimental_useSidebarThreads as useSidebarThreads,
+  useRealtime,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
@@ -35,6 +37,8 @@ import {
   useChildThreadDisplay,
 } from "./ChildThreadDisplay";
 import { ProviderGlyph } from "./ProviderGlyph";
+import { ProjectFavicon } from "./ProjectFavicon";
+import { PROJECT_ICONS_CHANNEL, projectIconUrl } from "./project-icons";
 
 const MAX_CHILD_DOTS = 3;
 
@@ -245,6 +249,7 @@ export function ChildThreadList({
   activeThreadId,
   expanded = true,
   showRunningChildrenWhenCollapsed = false,
+  parentProjectId,
   onOpenThread,
 }: {
   threads: readonly PluginSidebarThread[];
@@ -261,9 +266,12 @@ export function ChildThreadList({
    * key; only its wording changed when it grew beyond running children.
    */
   showRunningChildrenWhenCollapsed?: boolean;
+  /** The project of the thread these children hang from. */
+  parentProjectId?: string | null;
   onOpenThread: (threadId: string) => void;
 }) {
   const disclosureId = useId();
+  const { projects } = useSidebarThreads();
   const visibleThreads = expanded
     ? threads.filter((thread) => !thread.isArchived)
     : collapsedChildThreads(
@@ -291,6 +299,7 @@ export function ChildThreadList({
     siblings: readonly PluginSidebarThread[],
     depth: number,
     ancestors: ReadonlySet<string>,
+    siblingParentProjectId: string | null | undefined,
   ): ReactNode => siblings
     .map((child) => {
       const path = new Set(ancestors).add(child.id);
@@ -314,6 +323,18 @@ export function ChildThreadList({
         : depth === 2 ? "great-grandchild" : "descendant";
       const listLabel = depth === 1 ? "Grandchildren"
         : depth === 2 ? "Great-grandchildren" : "Descendants";
+      // Children can live in another project than their parent; say so,
+      // since nothing else in the tree shows a row's project.
+      const foreignProject =
+        siblingParentProjectId != null &&
+        child.projectId !== siblingParentProjectId
+          ? {
+              id: child.projectId,
+              name:
+                projects.find((project) => project.id === child.projectId)
+                  ?.name ?? null,
+            }
+          : undefined;
       return (
         <li key={child.id} className="list-none">
           <ChildThreadRow
@@ -322,6 +343,7 @@ export function ChildThreadList({
             variant={variant}
             now={now}
             isActive={child.id === activeThreadId}
+            foreignProject={foreignProject}
             onOpenThread={onOpenThread}
             disclosure={
               descendants.length > 0
@@ -342,7 +364,7 @@ export function ChildThreadList({
               data-grandchild-thread-list={depth === 1 ? variant : undefined}
               className="ml-3 flex flex-col border-l border-border"
             >
-              {renderRows(visibleDescendants, depth + 1, path)}
+              {renderRows(visibleDescendants, depth + 1, path, child.projectId)}
             </ul>
           ) : null}
         </li>
@@ -362,9 +384,14 @@ export function ChildThreadList({
           : "ml-4 mt-1 border-l border-border",
       )}
     >
-      {renderRows(visibleThreads, 1, new Set())}
+      {renderRows(visibleThreads, 1, new Set(), parentProjectId)}
     </ul>
   );
+}
+
+interface ForeignProject {
+  id: string;
+  name: string | null;
 }
 
 interface GrandchildDisclosure {
@@ -381,6 +408,7 @@ function ChildThreadRow({
   variant,
   now,
   isActive = false,
+  foreignProject,
   onOpenThread,
   disclosure,
 }: {
@@ -389,6 +417,8 @@ function ChildThreadRow({
   variant: "header" | "sidebar";
   now?: number;
   isActive?: boolean;
+  /** Set when the thread's project differs from its parent's. */
+  foreignProject?: ForeignProject;
   onOpenThread: (threadId: string) => void;
   disclosure?: GrandchildDisclosure;
 }) {
@@ -445,7 +475,12 @@ function ChildThreadRow({
             aria-label={
               isRenaming
                 ? undefined
-                : childThreadOpenLabel(relation, title, visibleStatus)
+                : childThreadOpenLabel(
+                    relation,
+                    title,
+                    visibleStatus,
+                    foreignProject,
+                  )
             }
             aria-current={isActive && !isRenaming ? "page" : undefined}
             draggable={false}
@@ -488,9 +523,13 @@ function ChildThreadRow({
               {variant === "header" ? (
                 <span className="truncate text-2xs text-muted-foreground">
                   {thread.originKind ?? "thread"}
+                  {foreignProject?.name ? ` · ${foreignProject.name}` : null}
                 </span>
               ) : null}
             </span>
+            {foreignProject ? (
+              <ForeignProjectMark project={foreignProject} />
+            ) : null}
             <OpenPortsIndicator thread={thread} />
             {variant === "header" ? (
               <span className="shrink-0">
@@ -532,8 +571,35 @@ function childThreadOpenLabel(
   relation: string,
   title: string,
   status: string | null,
+  foreignProject?: ForeignProject,
 ): string {
-  return `Open ${relation} thread: ${title}${status ? `, ${status}` : ""}`;
+  const project = foreignProject
+    ? `, in ${foreignProject.name ? `project ${foreignProject.name}` : "another project"}`
+    : "";
+  return `Open ${relation} thread: ${title}${project}${status ? `, ${status}` : ""}`;
+}
+
+/**
+ * The project icon on a child from another project than its parent. Only
+ * these rows subscribe to icon updates; same-project rows draw nothing.
+ */
+function ForeignProjectMark({ project }: { project: ForeignProject }) {
+  const [iconRevision, setIconRevision] = useState(0);
+  useRealtime(PROJECT_ICONS_CHANNEL, () => {
+    setIconRevision((revision) => revision + 1);
+  });
+  return (
+    <span
+      data-foreign-project={project.id}
+      className="flex shrink-0 items-center pl-1"
+    >
+      <ProjectFavicon
+        src={projectIconUrl(project.id, iconRevision)}
+        name={project.name}
+        className="size-3"
+      />
+    </span>
+  );
 }
 
 function GrandchildDisclosureButton({

@@ -514,6 +514,7 @@ export function ThreadCard({
               activeThreadId={activeThreadId}
               expanded={childrenExpanded}
               showRunningChildrenWhenCollapsed={showChildrenWhenCollapsed}
+              parentProjectId={thread.projectId}
               variant="sidebar"
               now={now}
               onOpenThread={(childId) => {

@@ -151,6 +151,39 @@ describe("SubagentsChip", () => {
     expect(requests).toBe(1);
   });
 
+  it("marks children from another project than their parent", () => {
+    renderSlot(
+      childrenChip,
+      { threadId: "parent", projectId: "proj_1", isCompactViewport: false },
+      {
+        sidebarThreads: {
+          status: "ready",
+          threads: [
+            thread({ id: "parent", title: "Parent" }),
+            thread({ id: "here", title: "Here", parentThreadId: "parent" }),
+            thread({ id: "away", title: "Away", projectId: "proj_2", parentThreadId: "parent" }),
+            thread({ id: "back", title: "Back", parentThreadId: "away" }),
+          ],
+          projects: [
+            { id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" },
+            { id: "proj_2", name: "xPlan", isPersonal: false, href: "", settingsHref: "" },
+          ],
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "2 child threads" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 grandchild thread for Away" }));
+
+    expect(screen.getByRole("button", { name: "Open child thread: Here" })
+      .querySelector("[data-foreign-project]")).toBeNull();
+    const away = screen.getByRole("button", { name: "Open child thread: Away, in project xPlan" });
+    expect(away.textContent).toContain("thread · xPlan");
+    expect(away.querySelector("[data-foreign-project]")?.getAttribute("data-foreign-project")).toBe("proj_2");
+    // Compared with its own parent, not the root: back in bb under an xPlan child.
+    expect(screen.getByRole("button", { name: "Open grandchild thread: Back, in project bb" })
+      .querySelector("[data-foreign-project]")?.getAttribute("data-foreign-project")).toBe("proj_1");
+  });
+
   it.each(["child", "grandchild", "great-grandchild"])("renames a %s without opening it and keeps the popup on cancel", async (targetId) => {
     const rendered = renderSlot(
       childrenChip,
