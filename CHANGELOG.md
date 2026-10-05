@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.34] - 2026-10-04
+
+### Fixed
+
+- Installing from the marketplace no longer fails with `Could not resolve "react-day-picker"`. Releases from 0.2.28 through 0.2.33 could not be installed fresh ([#7](https://github.com/yusuf8834/bb-sidebar/issues/7), reported by [@a-kras](https://github.com/a-kras)).
+
+### Changed
+
+- Settling a thread plays a short sweep across its card before the card moves. Reduced motion settles at once.
+- The snooze control turns orange while its menu is open, on hover, and on keyboard focus.
+- The message Active shows when every thread is working changes each time the scene appears, and never repeats the previous one.
+
 ## [0.2.33] - 2026-10-04
 
 ### Added
