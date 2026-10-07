@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  createFakePluginHost,
+  createFakePluginHost as createFakePluginHostBase,
   makeThreadResponse,
 } from "@get-bb/plugin-sdk/testing";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
@@ -12,6 +12,25 @@ interface LifecycleListResult {
 type Environment = Awaited<ReturnType<BbPluginApi["sdk"]["environments"]["get"]>>;
 
 const disposers: Array<() => Promise<void>> = [];
+
+function createFakePluginHost(
+  options: NonNullable<Parameters<typeof createFakePluginHostBase>[0]>,
+) {
+  return createFakePluginHostBase({
+    ...options,
+    sdk: {
+      ...options.sdk,
+      threads: {
+        archive: async ({ threadId }) => ({
+          ok: true as const,
+          archivedThreadIds: [threadId],
+        }),
+        unarchive: async () => ({ ok: true as const }),
+        ...options.sdk?.threads,
+      },
+    },
+  });
+}
 
 function standardProject() {
   return {

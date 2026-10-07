@@ -1654,8 +1654,9 @@ export default async function plugin(bb: BbPluginApi) {
     async settle({ threadId }) {
       // Native pinning and this plugin's settled shelf are competing ways to
       // keep a thread out of the ordinary inbox. Settling wins, and a failed
-      // unpin leaves the lifecycle row untouched instead of half-applying it.
+      // unpin or archive leaves the lifecycle row untouched.
       await bb.sdk.threads.unpin({ threadId });
+      await bb.sdk.threads.archive({ threadId });
       // Settling clears any snooze: they are two answers to the same
       // question, and holding both would make the shelf order ambiguous.
       const now = Date.now();
@@ -1666,11 +1667,12 @@ export default async function plugin(bb: BbPluginApi) {
         snoozedUntil: null,
         snoozedAt: null,
       });
-      // The shelf move is durable before anything is released, so a slow or
-      // unreachable host delays the reminder without holding up the settle.
+      // Archive handles the thread tree. Reclaim also releases an idle runtime.
       return { ok: true, reclaim: await reclaimThreadResources(threadId) };
     },
     async unsettle({ threadId }) {
+      // Undo must restore visibility before clearing the settled override.
+      await bb.sdk.threads.unarchive({ threadId });
       const current = readOne(threadId);
       write({
         threadId,
